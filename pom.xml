@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>net.opentsdb</groupId>
+    <artifactId>opentsdb.grpc.parent</artifactId>
+    <version>2.4.0-SNAPSHOT</version>
+
+    <packaging>pom</packaging>
+
+    <name>OpenTSDB :: gRPC :: Parent</name>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <additionalparam>-Xdoclint:none</additionalparam>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        
+        <junit.version>4.12</junit.version>
+        <grpc.version>1.9.0</grpc.version>
+        <protobuff.version>3.5.1</protobuff.version>
+        <protoc.version>3.5.1-1</protoc.version>
+        <slf4j.version>1.7.7</slf4j.version> 
+        <logback.version>1.0.13</logback.version>
+        <opentsdb.version>2.4.0-SNAPSHOT</opentsdb.version> 
+        <proto-validator.version>1.0-SNAPSHOT</proto-validator.version>
+
+        <os-maven.version>1.4.1.Final</os-maven.version>
+        <protobuf-maven.version>0.5.0</protobuf-maven.version>
+        
+
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>com.serious</groupId>
+                <artifactId>grpc-protobuf-validation</artifactId>                
+                <version>${proto-validator.version}</version>
+            </dependency>
+
+
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-netty</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-protobuf</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-stub</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-services</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>            
+
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuff.version}</version>
+            </dependency>
+
+            <dependency>
+              <groupId>org.slf4j</groupId>
+              <artifactId>slf4j-api</artifactId>
+              <version>${slf4j.version}</version>
+              <scope>provided</scope>
+            </dependency>   
+
+          <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.version}</version>
+            <scope>provided</scope>
+          </dependency>
+          
+          <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+            <version>${logback.version}</version>
+            <scope>provided</scope>
+          </dependency>
+
+          <dependency>
+            <groupId>net.opentsdb</groupId>
+            <artifactId>opentsdb</artifactId>
+            <version>${opentsdb.version}</version>
+            <scope>provided</scope>
+          </dependency>
+
+        </dependencies>
+    </dependencyManagement>
+
+    <modules>
+        <module>opentsdb-grpc-server</module>
+    </modules>
+
+
+</project>

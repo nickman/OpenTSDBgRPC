@@ -1,0 +1,353 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "net.opentsdb.grpc";
+
+package opentsdb;
+
+//import "validate/validate.proto";
+//import "validation.proto";
+
+service OpenTSDBService {
+	
+	rpc S(ContentName) returns (Content) {}
+	rpc GetAggregators(Empty) returns (AggregatorNames) {}
+	rpc GetAnnotation(AnnotationRequest) returns (TSDBAnnotation) {}
+	rpc CreateAnnotations(stream TSDBAnnotation) returns (stream TSDBAnnotation) {}
+	rpc UpdateAnnotations(stream TSDBAnnotation) returns (stream TSDBAnnotation) {}
+	rpc DeleteAnnotations(TSDBAnnotation) returns (TSDBAnnotation) {}
+	rpc BulkDeleteAnnotations(BulkAnnotationRequest) returns (BulkAnnotationResponse) {}
+	rpc GetConfiguration(Empty) returns (KeyValues) {}
+	rpc GetFilterMetas(Empty) returns (FilterMetas) {}
+	rpc DropCaches(Empty) returns (Empty) {}
+	rpc Put(PutDatapoints) returns (PutDatapointsResponse) {}	
+	rpc Puts(stream DataPoint) returns (stream PutDatapointsResponse) {}
+	
+	
+	
+
+//	rpc GetByName(Name) returns (Namespace) {}
+//	rpc GetAll(Empty) returns (stream Namespace) {}
+//	rpc GetByWebsiteId(WebsiteId) returns (Namespace) {}
+//	rpc GetNamespace(Id) returns (Namespace) {}
+//	rpc UpdateNamespace(Namespace) returns (Namespace) {}
+//	rpc DeleteNamespace(Id) returns (Namespace) {}
+//	rpc BulkNamespaces(stream Namespace) returns (Empty) {}
+
+}
+
+message HttpResponse {
+	int32 code = 1;
+	string phrase = 2;
+}
+
+message Tsuid {
+	string tsuid = 1;
+}
+
+message Tsuids {
+	repeated Tsuid tsuids = 1;
+}
+
+message ContentName {
+	string name = 1;
+}
+
+message AggregatorName {
+	string name = 1;
+}
+
+message AggregatorNames {
+	repeated AggregatorName aggregatorName = 1;
+}
+
+message Empty {
+}
+
+message Content {
+	bytes content = 1;
+}
+
+message TSDBAnnotation {
+	int64 startTime = 1;
+	int64 endTime = 2;
+	Tsuid tsuid = 3;
+	string description = 4;
+	string notes = 5;
+	map<string, string> custom = 6;	
+}
+
+message AnnotationRequest {
+	int64 startTime = 1;
+	string tsuid = 2;
+}
+
+message RelativeTime {
+	int64 time = 1;
+	string unit = 2; 
+}
+
+message DateTime {
+	oneof TimeRange {
+		RelativeTime relTime = 1;
+		int64 unitTime = 2;
+		string absTime = 3;
+	}
+}
+
+message BulkAnnotationRequest {
+	DateTime startTime = 1;
+	DateTime endTime = 2;
+	Tsuids tsuids = 3;
+	bool global = 4;	
+}
+
+message BulkAnnotationResponse {
+	Tsuids tsuids = 1;
+	bool global = 2;
+	int64 startTime = 3;
+	int64 endTime = 4;
+	int64 total = 5;			
+}
+
+message KeyValue {
+	string key = 1;
+	string value = 2;	
+}
+
+message KeyValues {
+	repeated KeyValue keyValues = 1;
+}
+
+message FilterMeta {
+	string name = 1;
+	string examples = 2;
+	string description = 3;
+}
+
+message FilterMetas {
+	map<string, FilterMeta> filters = 1;
+}
+
+message MetricTags {
+	string metric = 1;
+	map<string, string> tags = 2;
+}
+
+message DataPoint {
+	MetricTags metricTags = 1;
+	int64 timestamp = 2;
+	oneof value {
+		double dvalue = 3;
+		int64 ivalue = 4;
+	}
+	Aggregation aggregation = 6;
+}
+
+message PutOptions {
+	oneof detail {
+		bool summary = 1;
+		bool details = 2;
+	}
+	bool sync = 3;
+	int32 syncTimeout = 4;
+}
+
+message PutDatapoints {
+	PutOptions options = 1;
+	repeated DataPoint dataPoints = 2;
+}
+
+message PutDatapointError {
+	string error = 1;
+	DataPoint dataPoint = 2;
+}
+
+message PutDatapointsResponse {
+	int32 success = 1;
+	int32 failed = 2;
+	repeated PutDatapointError errors = 3;
+}
+
+enum Aggregator {
+	SUM = 0;
+	PFSUM = 1;
+	MIN = 2;
+	MAX = 3;
+	AVG = 4;
+	MEDIAN = 5;
+	NONE = 6;
+	MULTIPLY = 7;
+	DEV = 8;
+	ZIMSUM = 9;
+	MIMMIN = 10;
+	MIMMAX = 11;
+	COUNT = 12;
+	FIRST = 13;
+	LAST = 14;
+	p999 = 15;
+	p99 = 16;
+	p95 = 17;
+	p90 = 18;
+	p75 = 19;
+	p50 = 20;
+	ep999r3 = 21;
+	ep99r3 = 22;
+	ep95r3 = 23;
+	ep90r3 = 24;
+	ep75r3 = 25;
+	ep50r3 = 26;
+	ep999r7 = 27;
+	ep99r7 = 28;
+	ep95r7 = 29;
+	ep90r7 = 30;
+	ep75r7 = 31;
+	ep50r7 = 32;
+}
+
+enum FillPolicy {
+	none = 0;
+	nan = 1;
+	NULL = 2;
+	zero = 3;
+}
+
+message Aggregation {
+	RelativeTime interval = 1;
+	Aggregator aggregator = 2;
+	Aggregator groupBy = 3;	 	
+}
+
+message RateOptions {
+	bool rate = 1;
+	bool counter = 2;
+	int32 counterMax = 3;
+	int32 resetValue = 4;
+	bool dropResets = 5;
+}
+
+message Downsample {
+	RelativeTime relTime = 1;
+	Aggregator aggregator = 2;
+	FillPolicy fillPolicy = 3;
+}
+
+message Percentiles {
+	repeated double percentile = 1;
+}
+
+enum FilterType {
+	iliteral_or = 0;
+	wildcard = 1;
+	not_literal_or = 2;
+	not_iliteral_or = 3;
+	not_key = 4;
+	iwildcard = 5;
+	literal_or = 6;
+	regexp = 8;
+}
+
+message Filter {
+	FilterType filterType = 1;
+	string tagk = 2;
+	string filterExpression = 3;
+	bool groupBy = 4;
+}
+
+message Filters {
+	repeated Filter filters = 1;
+}
+
+
+
+message SubQuery {
+	Aggregator aggregator = 1;
+	oneof metrics {
+		MetricTags metricTags = 2;
+		Tsuids tsuids = 3;
+	}		
+	RateOptions rateOptions = 4;
+	Downsample downSample = 5;
+	Filters filters = 6;
+	Percentiles percentiles = 7;		
+}
+
+message SubQueries {
+	repeated SubQuery queries = 1;
+}
+
+enum StatsSection {
+	GLOBAL = 0;
+	QUERY = 1;
+	SCANNER = 2;
+}
+
+message StatsValue {
+	string key = 1;
+	oneof value {
+		double dvalue = 2;
+		string svalue = 3;
+	}
+}
+
+message StatsValues {
+	repeated StatsValue statsValues = 1;
+}
+
+message StatsLevel {
+	string key = 1;
+	StatsValues values = 2;
+}
+
+
+
+message StatsMap {
+	oneof rstats {
+		StatsValues stats = 1;
+		StatsLevel level = 2;
+	}
+}
+
+message StatsMaps {
+	repeated StatsMap stats = 1;
+}
+
+message Query {
+	DateTime startTime = 1;
+	DateTime endTime = 2;
+	SubQueries queries = 3;
+	bool noAnnotations = 4;
+	bool globalAnnotations = 5;
+	bool msResolution = 6;
+	bool showTsuids = 7;
+	bool showSummary = 8;
+	bool showStats = 9;
+	bool showQuery = 10;
+	bool delete = 11;
+	string timezone = 12;
+	bool useCalendar = 13;
+}
+
+message SubQueryResponse {
+	MetricTags metricTags = 1;
+	repeated string aggregatedTags = 2;
+	Tsuids tsuids = 3;
+	map<int64, double> dps = 4;
+	repeated TSDBAnnotation annotations = 5;
+	repeated TSDBAnnotation globalAnnotations = 6;
+	SubQuery subQuery = 7;	
+}
+
+message QueryResponse {
+	repeated SubQueryResponse resonses = 1;
+	map<string, double> statsSummary = 2;
+}
+
+
+
+
+
+
+
+
+
