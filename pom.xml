@@ -29,6 +29,9 @@
 
         <os-maven.version>1.4.1.Final</os-maven.version>
         <protobuf-maven.version>0.5.0</protobuf-maven.version>
+        <eclipse-plugin.version>2.10</eclipse-plugin.version>
+        <downloadJavadocs>true</downloadJavadocs>
+        <downloadSources>true</downloadSources>
         
 
     </properties>
@@ -112,6 +115,7 @@
     </dependencyManagement>
 
     <modules>
+        <module>opentsdb-grpc-core</module>
         <module>opentsdb-grpc-server</module>
     </modules>
 

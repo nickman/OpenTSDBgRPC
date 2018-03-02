@@ -23,22 +23,28 @@ service OpenTSDBService {
 	rpc Put(PutDatapoints) returns (PutDatapointsResponse) {}	
 	rpc Puts(stream DataPoint) returns (stream PutDatapointsResponse) {}
 	
-	
-	
+	rpc AssignUid(Assignment) returns (Uid) {}
+	rpc AssignUids(stream Assignment) returns (stream Uid) {}
 
-//	rpc GetByName(Name) returns (Namespace) {}
-//	rpc GetAll(Empty) returns (stream Namespace) {}
-//	rpc GetByWebsiteId(WebsiteId) returns (Namespace) {}
-//	rpc GetNamespace(Id) returns (Namespace) {}
-//	rpc UpdateNamespace(Namespace) returns (Namespace) {}
-//	rpc DeleteNamespace(Id) returns (Namespace) {}
-//	rpc BulkNamespaces(stream Namespace) returns (Empty) {}
+	rpc DeleteUid(Assignment) returns (Empty) {}
+	rpc DeleteUids(stream Assignment) returns (stream Count) {}
+	
+	rpc RenameUid(Reassignment) returns (Empty) {}
+	rpc RenameUids(stream Reassignment) returns (stream Count) {}
+	
+	rpc ExecuteQuery(Query) returns (QueryResponse) {}
+	rpc ExecuteQueries(Query) returns (stream SubQueryResponse) {}
+	
 
 }
 
 message HttpResponse {
 	int32 code = 1;
 	string phrase = 2;
+}
+
+message Count {
+	int64 count = 1;
 }
 
 message Tsuid {
@@ -212,10 +218,34 @@ enum FillPolicy {
 	zero = 3;
 }
 
+enum UidType {
+	metric = 0;
+	tagk = 1;
+	tagv = 2;
+}
+
+message Assignment {
+	UidType type = 1;
+	string name = 2;
+}
+
+message Reassignment {
+	UidType type = 1;
+	string oldName = 2;
+	string newName = 3;
+}
+
+message Uid {
+	UidType type = 1;
+	string name = 2;
+	bytes uidBytes = 3;
+}
+
 message Aggregation {
-	RelativeTime interval = 1;
-	Aggregator aggregator = 2;
-	Aggregator groupBy = 3;	 	
+	bool groupBy = 1;
+	RelativeTime interval = 2;
+	Aggregator rollup = 3;
+	Aggregator grouping = 4;	 	
 }
 
 message RateOptions {
