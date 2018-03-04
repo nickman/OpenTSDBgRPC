@@ -48,7 +48,15 @@ message Count {
 }
 
 message Tsuid {
-	string tsuid = 1;
+	string tsuidName = 1;
+	bytes tsuidBytes = 2;
+}
+
+message TsuidBorS {
+	oneof tsuid {
+		string tsuidName = 1;
+		bytes tsuidBytes = 2;
+	}
 }
 
 message Tsuids {
@@ -85,7 +93,7 @@ message TSDBAnnotation {
 
 message AnnotationRequest {
 	int64 startTime = 1;
-	string tsuid = 2;
+	TsuidBorS tsuid  = 2;
 }
 
 message RelativeTime {
@@ -141,13 +149,11 @@ message MetricTags {
 }
 
 message DataPoint {
-	MetricTags metricTags = 1;
-	int64 timestamp = 2;
-	oneof value {
-		double dvalue = 3;
-		int64 ivalue = 4;
-	}
-	Aggregation aggregation = 6;
+	string metric = 1;
+	MetricTags metricTags = 2;
+	int64 timestamp = 3;
+	double value = 4;
+	Aggregation aggregation = 5;
 }
 
 message PutOptions {
@@ -155,8 +161,6 @@ message PutOptions {
 		bool summary = 1;
 		bool details = 2;
 	}
-	bool sync = 3;
-	int32 syncTimeout = 4;
 }
 
 message PutDatapoints {
@@ -170,9 +174,10 @@ message PutDatapointError {
 }
 
 message PutDatapointsResponse {
-	int32 success = 1;
-	int32 failed = 2;
-	repeated PutDatapointError errors = 3;
+	int64 success = 1;
+	int64 failed = 2;
+	bool finalResponse = 3;
+	repeated PutDatapointError errors = 4;
 }
 
 enum Aggregator {

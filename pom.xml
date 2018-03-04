@@ -26,6 +26,18 @@
         <logback.version>1.0.13</logback.version>
         <opentsdb.version>2.4.0-SNAPSHOT</opentsdb.version> 
         <proto-validator.version>1.0-SNAPSHOT</proto-validator.version>
+        <netty.version>4.1.17.Final</netty.version>
+        <jctools.version>2.1.1</jctools.version>
+
+        <!-- Plugin Versions -->
+        <compiler-plugin.version>3.5.1</compiler-plugin.version>
+        <source-plugin.version>2.2</source-plugin.version>
+        <javadoc-plugin.version>2.9</javadoc-plugin.version>
+        <jar-plugin.version>2.4</jar-plugin.version>
+        <eclipse-plugin.version>2.9</eclipse-plugin.version>
+        <surefire.version>2.16</surefire.version>
+        <cobertura.version>2.5.1</cobertura.version>
+        <shade.version>2.4.3</shade.version>
 
         <os-maven.version>1.4.1.Final</os-maven.version>
         <protobuf-maven.version>0.5.0</protobuf-maven.version>
@@ -52,6 +64,24 @@
                 <version>${proto-validator.version}</version>
             </dependency>
 
+            <dependency>
+                  <groupId>io.netty</groupId>
+                  <artifactId>netty-transport-native-epoll</artifactId>
+                  <version>${netty.version}</version>
+                  <classifier>linux-x86_64</classifier>
+            </dependency>
+            
+            <dependency>
+                  <groupId>io.netty</groupId>
+                  <artifactId>netty-transport-native-epoll</artifactId>
+                  <version>${netty.version}</version>
+            </dependency>
+
+            <dependency>
+              <groupId>org.jctools</groupId>
+              <artifactId>jctools-core</artifactId>
+              <version>${jctools.version}</version>
+            </dependency>
 
             <dependency>
                 <groupId>io.grpc</groupId>
