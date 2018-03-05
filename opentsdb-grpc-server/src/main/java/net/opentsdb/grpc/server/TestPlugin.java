@@ -19,12 +19,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.function.Consumer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.grpc.Channel;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.MethodDescriptor;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.grpc.AggregatorNames;
@@ -64,10 +67,12 @@ public class TestPlugin {
 	 */
 	public static void main(String[] args) {		
 		LOG.info("Testing gRPC Plugin");
+		Logger log = LoggerFactory.getLogger("io.grpc");
+		((ch.qos.logback.classic.Logger)log).setLevel(ch.qos.logback.classic.Level.DEBUG);
 		TestPlugin tp = new TestPlugin();
 		//tp.aggrs();
 		//		tp.addDataPoints();
-		tp.streamDataPoints();
+		tp.streamDataPoints2();
 		try {
 			System.in.read();
 			LOG.info("Shutting Down...");
@@ -75,6 +80,42 @@ public class TestPlugin {
 		} catch (Exception ex) {
 			LOG.error("Main Error", ex);
 		}
+	}
+	
+	public void streamAnnotations() {
+		
+	}
+	
+	public void streamDataPoints2() {
+		StreamingHelper<DataPoint,PutDatapointsResponse> stream = new StreamingHelper<>(channel, OpenTSDBServiceGrpc.getPutsMethod(), 
+				r -> {
+					if(r.getFinalResponse()) {
+						LOG.info("Final: {}", r);
+					}
+				},
+				str -> {
+					LOG.info("Complete");
+					LOG.info("FINAL STATS: {}", str.printStats());
+				}
+		);		
+		Map<String, String> tags = new HashMap<>();
+		tags.put("foo", "bar");
+		MetricTags mtags = MetricTags.newBuilder().putAllTags(tags).build();
+		stream.startStream();
+		for(int i = 0; i < 10000; i++) {
+			DataPoint dp = DataPoint.newBuilder()
+					.setMetric(i==300 ? ("xxx" + i) : ("xxx" + i))
+					.setMetricTags(mtags)
+					.setTimestamp(System.currentTimeMillis())
+					.setValue(i * 13)
+					.build();
+			stream.blockingSend(dp);
+			if(i > 0 && i%1000==0) {
+				LOG.info("Streamer Stats: \n{}", stream.printStats());
+			}
+		}
+		stream.halfClose();
+
 	}
 
 	public void streamDataPoints() {
@@ -146,7 +187,9 @@ public class TestPlugin {
 				//			try {
 				//				if(sending.get().await(1000, TimeUnit.MILLISECONDS)) {
 				//					dpSent.increment();
-				//				} else {
+				//				} else {			dpSent.increment();
+				inFlight.incrementAndGet();
+
 				//					LOG.info("Timeouts: t={}, sent={}", timeouts.incrementAndGet(), dpSent.longValue());
 				//				}
 				//			} catch (InterruptedException iex) {

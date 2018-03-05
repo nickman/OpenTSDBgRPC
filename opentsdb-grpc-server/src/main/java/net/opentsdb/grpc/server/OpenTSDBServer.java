@@ -8,25 +8,18 @@ import java.io.FileNotFoundException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.LongAdder;
 import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.ByteString;
-import com.stumbleupon.async.Callback;
-import com.stumbleupon.async.Deferred;
 
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.core.Aggregators;
 import net.opentsdb.core.TSDB;
-import net.opentsdb.grpc.Aggregation;
 import net.opentsdb.grpc.AggregatorName;
 import net.opentsdb.grpc.AggregatorNames;
 import net.opentsdb.grpc.AnnotationRequest;
@@ -36,26 +29,23 @@ import net.opentsdb.grpc.BulkAnnotationResponse;
 import net.opentsdb.grpc.Content;
 import net.opentsdb.grpc.ContentName;
 import net.opentsdb.grpc.Count;
+import net.opentsdb.grpc.CreateAnnotationResponse;
 import net.opentsdb.grpc.DataPoint;
 import net.opentsdb.grpc.Empty;
 import net.opentsdb.grpc.FilterMeta;
 import net.opentsdb.grpc.FilterMetas;
 import net.opentsdb.grpc.KeyValues;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase;
-import net.opentsdb.grpc.PutDatapointError;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
-import net.opentsdb.grpc.PutOptions;
 import net.opentsdb.grpc.Query;
 import net.opentsdb.grpc.QueryResponse;
 import net.opentsdb.grpc.Reassignment;
 import net.opentsdb.grpc.SubQueryResponse;
 import net.opentsdb.grpc.TSDBAnnotation;
-import net.opentsdb.grpc.TsuidBorS;
 import net.opentsdb.grpc.Uid;
+import net.opentsdb.grpc.server.handlers.AnnotationHandler;
 import net.opentsdb.grpc.server.handlers.DataPointPutHandler;
-import net.opentsdb.grpc.server.util.RelTime;
-import net.opentsdb.meta.Annotation;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.stats.StatsCollector;
 
@@ -74,6 +64,7 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	private final Path staticPath;
 	private final AggregatorNames aggrNames;
 	private final DataPointPutHandler putHandler;
+	private final AnnotationHandler annHandler;
 
 
 	/**
@@ -88,6 +79,7 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 		staticPath = staticDir.toPath();
 		aggrNames = buildAggregatorNames();
 		putHandler = new DataPointPutHandler(tsdb, cfg);
+		annHandler = new AnnotationHandler(tsdb, cfg);
 	}
 
 	private AggregatorNames buildAggregatorNames() {
@@ -140,165 +132,50 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 		responseObserver.onCompleted();
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#getAnnotation(net.opentsdb.grpc.AnnotationRequest, io.grpc.stub.StreamObserver)
+	 */
 	@Override
 	public void getAnnotation(AnnotationRequest request, StreamObserver<TSDBAnnotation> responseObserver) {
-		LOG.debug("getAnnotation: {}", request);
-		long startTime = request.getStartTime();
-		TsuidBorS ts = request.getTsuid();
-		try {
-			Deferred<Annotation> def = null;
-			switch(ts.getTsuidCase()) {
-			case TSUIDBYTES:
-				def = Annotation.getAnnotation(tsdb, ts.getTsuidBytes().toByteArray(), startTime);
-				break;
-			case TSUIDNAME:
-				def = Annotation.getAnnotation(tsdb, ts.getTsuidName(), startTime);
-				break;
-			case TSUID_NOT_SET:
-				def = Annotation.getAnnotation(tsdb, startTime);
-			}
-			def.addCallbacks(
-					new Callback<Void, Annotation>(){
-						@Override
-						public Void call(Annotation ann) throws Exception {
-							responseObserver.onNext(ProtoConverters.from(ann));
-							responseObserver.onCompleted();
-							return null;
-						}
-					},
-					new Callback<Void, Exception>(){
-						@Override
-						public Void call(Exception ex) throws Exception {
-							LOG.error("Failed to get annotation", ex);
-							responseObserver.onError(ex);
-							return null;
-						}
-					}
-					);
-		} catch (Exception ex) {
-			responseObserver.onError(ex);
-		}		
+		annHandler.getAnnotation(request, responseObserver);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#createAnnotations(io.grpc.stub.StreamObserver)
+	 */
 	@Override
-	public StreamObserver<TSDBAnnotation> createAnnotations(StreamObserver<TSDBAnnotation> responseObserver) {
-		LOG.debug("createAnnotations stream");
-		return new StreamObserver<TSDBAnnotation>() {
-			@Override
-			public void onNext(TSDBAnnotation value) {
-				LOG.debug("createAnnotation: {}", value);
-				Annotation a = ProtoConverters.from(value);
-				a.syncToStorage(tsdb, false).addCallbacks(
-						new Callback<Void, Boolean>(){
-							@Override
-							public Void call(Boolean result) throws Exception {
-								if(result) {
-									responseObserver.onNext(value);
-								} else {
-									responseObserver.onError(new Exception("CAS Failure saving annotation: " + value));
-								}
-								return null;
-							}
-						},
-						new Callback<Void, Exception>(){
-							@Override
-							public Void call(Exception ex) throws Exception {
-								LOG.error("Failed to save annotation", ex);
-								responseObserver.onError(new Exception("Failed to save annotation: " + value, ex));
-								return null;
-							}
-						}
-						);
-
-			}
-
-			@Override
-			public void onError(Throwable t) {
-				LOG.error("createAnnotations inbound stream failure", t);				
-			}
-
-			@Override
-			public void onCompleted() {
-				responseObserver.onCompleted();
-			}
-
-		};
+	public StreamObserver<TSDBAnnotation> createAnnotations(StreamObserver<CreateAnnotationResponse> responseObserver) {
+		return annHandler.createAnnotations(responseObserver);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#updateAnnotations(io.grpc.stub.StreamObserver)
+	 */
 	@Override
 	public StreamObserver<TSDBAnnotation> updateAnnotations(StreamObserver<TSDBAnnotation> responseObserver) {
-		LOG.debug("updateAnnotations stream");
-		return new StreamObserver<TSDBAnnotation>() {
-			@Override
-			public void onNext(TSDBAnnotation value) {
-				LOG.debug("updateAnnotation: {}", value);
-				Annotation a = ProtoConverters.from(value);
-				a.syncToStorage(tsdb, true).addCallbacks(
-						new Callback<Void, Boolean>(){
-							@Override
-							public Void call(Boolean result) throws Exception {
-								if(result) {
-									responseObserver.onNext(value);
-								} else {
-									responseObserver.onError(new Exception("CAS Failure saving annotation: " + value));
-								}
-								return null;
-							}
-						},
-						new Callback<Void, Exception>(){
-							@Override
-							public Void call(Exception ex) throws Exception {
-								LOG.error("Failed to save annotation", ex);
-								responseObserver.onError(new Exception("Failed to save annotation: " + value, ex));
-								return null;
-							}
-						}
-						);
-
-			}
-
-			@Override
-			public void onError(Throwable t) {
-				LOG.error("updateAnnotations inbound stream failure", t);				
-			}
-
-			@Override
-			public void onCompleted() {
-				responseObserver.onCompleted();
-			}
-
-		};
+		return annHandler.updateAnnotations(responseObserver);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#deleteAnnotations(net.opentsdb.grpc.TSDBAnnotation, io.grpc.stub.StreamObserver)
+	 */
 	@Override
 	public void deleteAnnotations(TSDBAnnotation request, StreamObserver<TSDBAnnotation> responseObserver) {
-		LOG.debug("deleteAnnotations: {}", request);
-		final Annotation ann = ProtoConverters.from(request);
-		ann.delete(tsdb).addCallbacks(
-				new Callback<Void, Object>(){
-					@Override
-					public Void call(Object result) throws Exception {
-						responseObserver.onNext(request);
-						return null;
-					}
-				},
-				new Callback<Void, Exception>(){
-					@Override
-					public Void call(Exception ex) throws Exception {
-						LOG.error("Failed to delete annotation", ex);
-						responseObserver.onError(new Exception("Failed to delete annotation: " + request, ex));
-						return null;
-					}
-				}
-				
-		);		
+		annHandler.deleteAnnotations(request, responseObserver);
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#bulkDeleteAnnotations(net.opentsdb.grpc.BulkAnnotationRequest, io.grpc.stub.StreamObserver)
+	 */
 	@Override
 	public void bulkDeleteAnnotations(BulkAnnotationRequest request,
 			StreamObserver<BulkAnnotationResponse> responseObserver) {
-		// TODO Auto-generated method stub
-		super.bulkDeleteAnnotations(request, responseObserver);
+		annHandler.bulkDeleteAnnotations(request, responseObserver);
 	}
 
 	@Override

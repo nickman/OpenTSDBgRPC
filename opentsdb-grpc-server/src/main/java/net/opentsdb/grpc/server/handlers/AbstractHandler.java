@@ -13,6 +13,8 @@
 package net.opentsdb.grpc.server.handlers;
 
 import java.lang.management.ManagementFactory;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.LongAdder;
 
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
@@ -47,6 +49,12 @@ public abstract class AbstractHandler {
 	/** The handler name */
 	protected final String name = getClass().getSimpleName().replace("Handler", "");
 	
+	/** The number of currently active streams for this handler */
+	protected final AtomicInteger activeStreams = new AtomicInteger();
+	/** The total number of created streams for this handler */
+	protected final LongAdder totalStreams = new LongAdder();
+
+	
 	
 	
 	/**
@@ -60,42 +68,45 @@ public abstract class AbstractHandler {
 		objectName = register();
 	}
 	
+	public int getActiveStreams() {
+		return activeStreams.get();
+	}
+	
+	public long getTotalStreams() {
+		return totalStreams.longValue();
+	}
+	
+	
 	/**
 	 * Collects stats for this handler
 	 * @param collector The stats collector
 	 */
-	protected void collectStats(StatsCollector collector) {
+	public void collectStats(StatsCollector collector) {
+		GrpcStatsCollector gcollector = new GrpcStatsCollector("grpc", collector);
+		try {
+			gcollector.addExtraTag("grpchandler", name);
+			doStats(gcollector);			
+		} finally {
+			gcollector.clearExtraTag("grpchandler");
+		}
+		gcollector.recordGrpc("activestreams", activeStreams.get());
+		gcollector.recordGrpc("totalstreams", totalStreams.longValue());
 		
 	}
 	
-	protected class GrpcStatsCollector extends StatsCollector {
-		protected final StatsCollector delegate;
-
-		public void emit(String datapoint) {
-			delegate.emit(datapoint);
-		}
-
-		public void record(String name, long value, String xtratag) {
-			delegate.record(name, value, xtratag);
-		}
-
-		public String toString() {
-			return delegate.toString();
-		}
-
-		public GrpcStatsCollector(String prefix, StatsCollector delegate) {
-			super(prefix);
-			this.delegate = delegate;
-		}
-		
-		
-	}
+	/**
+	 * Collects handler stats
+	 * @param collector A grpc specific stats collector
+	 */
+	protected abstract void doStats(GrpcStatsCollector collector);
+	
 
 	/**
 	 * Creates the JMX ObjectName and registers this handler
 	 * @return the created ObjectName
 	 */
 	protected ObjectName register() {
+		
 		try {
 			ObjectName on = new ObjectName(OBJECT_NAME_PREFIX + name);
 			MBEAN_SERVER.registerMBean(this, on);

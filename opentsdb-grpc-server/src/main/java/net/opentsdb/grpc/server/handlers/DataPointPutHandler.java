@@ -52,18 +52,15 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 			.setFailed(-1)
 			.build();
 	
-	protected final AtomicInteger activeStreams = new AtomicInteger();
 	protected final LongAdder receivedDataPoints = new LongAdder();
 	protected final LongAdder okDataPoints = new LongAdder();
 	protected final LongAdder failedDataPoints = new LongAdder();
 	
-	public int getActiveStreams() {
-		return activeStreams.get();
-	}
 	
 	public long getReceivedDataPoints() {
 		return receivedDataPoints.longValue();
 	}
+	
 	
 	public long getProcessedDataPoints() {
 		return okDataPoints.longValue();
@@ -74,17 +71,10 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 	}
 	
 	@Override
-	public void collectStats(StatsCollector collector) {
-		try {
-			collector.addExtraTag("grpchandler", name);
-			collector.record("grpc.dpoints.activestreams", activeStreams.get());
-			collector.record("grpc.dpoints.rcvdp", receivedDataPoints.longValue());
-			collector.record("grpc.dpoints.okdp", okDataPoints.longValue());
-			collector.record("grpc.dpoints.faileddp", failedDataPoints.longValue());
-		} finally {
-			collector.clearExtraTag("grpchandler");
-		}
-		
+	protected void doStats(GrpcStatsCollector collector) {
+		collector.recordGrpc("rcvdp", receivedDataPoints.longValue());
+		collector.recordGrpc("okdp", okDataPoints.longValue());
+		collector.recordGrpc("faileddp", failedDataPoints.longValue());
 	}
 
 	/**
@@ -100,7 +90,8 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 		LOG.info("Streaming DataPoints Initiated");
 		final AtomicBoolean open = new AtomicBoolean(true);
 		activeStreams.incrementAndGet();
-		return new ClientCallStreamObserver<DataPoint>() {			
+		totalStreams.increment();
+		return new StreamObserver<DataPoint>() {			
 			final long startTime = System.currentTimeMillis();
 			final LongAdder _receivedDataPoints = new AccumulatingLongAdder(receivedDataPoints);
 			final LongAdder _okDataPoints = new AccumulatingLongAdder(okDataPoints);
@@ -141,7 +132,7 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 			@Override
 			public void onError(Throwable t) {
 				LOG.error("Streaming DataPoints Error", t);
-				LOG.info("Streaming DataPoints Progress: dps={}, elapsed={}", _okDataPoints.longValue(), System.currentTimeMillis()-startTime);				
+				LOG.info("Streaming DataPoints Progress: ok={}, failed={}, elapsed={}", _okDataPoints.longValue(), _failedDataPoints.longValue(), System.currentTimeMillis()-startTime);				
 				if(open.compareAndSet(true, false)) {
 					activeStreams.decrementAndGet();
 				}
@@ -160,43 +151,6 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 				}
 			}
 
-			@Override
-			public void cancel(String message, Throwable cause) {
-				// TODO Auto-generated method stub
-				
-			}
-
-			@Override
-			public boolean isReady() {
-				// TODO Auto-generated method stub
-				return false;
-			}
-
-			@Override
-			public void setOnReadyHandler(Runnable onReadyHandler) {
-				// TODO Auto-generated method stub
-				
-			}
-
-			@Override
-			public void disableAutoInboundFlowControl() {
-				// TODO Auto-generated method stub
-				
-			}
-
-			@Override
-			public void request(int count) {
-				// TODO Auto-generated method stub
-				
-			}
-
-			@Override
-			public void setMessageCompression(boolean enable) {
-				// TODO Auto-generated method stub
-				
-			}
-
-			
 		};
 		
 	}
@@ -243,12 +197,13 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 		boolean details = opts.getDetails();
 		boolean summary = opts.getSummary();
 		boolean noresp = !details && !summary;
-		LongAdder success = new LongAdder();
-		LongAdder fails = new LongAdder();
+		LongAdder success = new AccumulatingLongAdder(okDataPoints);
+		LongAdder fails = new AccumulatingLongAdder(failedDataPoints);
 		Map<DataPoint, String> failedDps = details ? new ConcurrentHashMap<>() : null;
 		
 		List<DataPoint> dps = request.getDataPointsList();
 		int size = dps.size();
+		receivedDataPoints.add(size);
 		LOG.info("Putting DataPoints: size={}, details={}, summary={}", size, details, summary);
 		final long startTime = System.currentTimeMillis();
 		List<Deferred<Object>> defs = putDps(dps, noresp, details, success, fails, failedDps);

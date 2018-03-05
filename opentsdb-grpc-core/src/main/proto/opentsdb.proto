@@ -13,7 +13,7 @@ service OpenTSDBService {
 	rpc S(ContentName) returns (Content) {}
 	rpc GetAggregators(Empty) returns (AggregatorNames) {}
 	rpc GetAnnotation(AnnotationRequest) returns (TSDBAnnotation) {}
-	rpc CreateAnnotations(stream TSDBAnnotation) returns (stream TSDBAnnotation) {}
+	rpc CreateAnnotations(stream TSDBAnnotation) returns (stream CreateAnnotationResponse) {}
 	rpc UpdateAnnotations(stream TSDBAnnotation) returns (stream TSDBAnnotation) {}
 	rpc DeleteAnnotations(TSDBAnnotation) returns (TSDBAnnotation) {}
 	rpc BulkDeleteAnnotations(BulkAnnotationRequest) returns (BulkAnnotationResponse) {}
@@ -90,6 +90,19 @@ message TSDBAnnotation {
 	string notes = 5;
 	map<string, string> custom = 6;	
 }
+
+message CreateAnnotationResponse {
+	int64 success = 1;
+	int64 failed = 2;
+	bool finalResponse = 3;
+	repeated CreateAnnotationError errors = 4;
+}
+
+message CreateAnnotationError {
+	string error = 1;
+	TSDBAnnotation annotation = 2;
+}
+
 
 message AnnotationRequest {
 	int64 startTime = 1;

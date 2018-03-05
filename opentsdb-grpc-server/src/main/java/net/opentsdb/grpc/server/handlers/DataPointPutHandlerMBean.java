@@ -28,6 +28,12 @@ public interface DataPointPutHandlerMBean {
 	public int getActiveStreams();
 	
 	/**
+	 * Returns the cummulative number of started datapoint streams
+	 * @return the total number of streams
+	 */
+	public long getTotalStreams();
+	
+	/**
 	 * Returns the total number of received datapoints
 	 * @return the total number of received datapoints
 	 */
