@@ -29,6 +29,9 @@ import io.grpc.ClientCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.stub.ClientCallStreamObserver;
+import io.grpc.stub.ClientCalls;
+import io.grpc.stub.ClientResponseObserver;
 
 /**
  * <p>Title: StreamingHelper</p>
@@ -55,6 +58,7 @@ public class StreamingHelper<T, R> extends ClientCall.Listener<R> {
 	final AtomicBoolean started = new AtomicBoolean(false);
 	final Consumer<StreamingHelper<T,R>> onComplete;
 	final AtomicReference<Thread> onReadyThread = new AtomicReference<>();
+	ClientCallStreamObserver<T> requestStream;
 	
 	public String printStats() {
 		StringBuilder b = new StringBuilder();
@@ -80,6 +84,7 @@ public class StreamingHelper<T, R> extends ClientCall.Listener<R> {
 		this.outConsumer = outConsumer;
 		this.onComplete = onComplete;
 		clientCall = channel.newCall(md, CallOptions.DEFAULT);
+		
 	}
 	
 	/**
@@ -113,6 +118,34 @@ public class StreamingHelper<T, R> extends ClientCall.Listener<R> {
 	public void startStream() {
 		startTime = System.currentTimeMillis();
 		started.set(true);
+		ClientCalls.asyncClientStreamingCall(clientCall, new ClientResponseObserver<T,R>(){
+
+			@Override
+			public void onNext(R value) {
+				// TODO Auto-generated method stub
+				
+			}
+
+			@Override
+			public void onError(Throwable t) {
+				// TODO Auto-generated method stub
+				
+			}
+
+			@Override
+			public void onCompleted() {
+				// TODO Auto-generated method stub
+				
+			}
+
+			@Override
+			public void beforeStart(ClientCallStreamObserver<T> rs) {
+				requestStream = rs;
+				rs.disableAutoInboundFlowControl();
+				
+			}
+			
+		});
 		clientCall.start(this, new Metadata());
 		clientCall.request(1);
 //		onReady();
