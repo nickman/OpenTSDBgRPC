@@ -54,7 +54,7 @@ public class TestPlugin {
 	private static final AtomicBoolean running = new AtomicBoolean(true);
 
 	public TestPlugin() {
-		channel = ManagedChannelBuilder.forAddress("localhost", 4249)
+		channel = ManagedChannelBuilder.forAddress("localhost", 10000)
 				.usePlaintext(true)
 				.build();
 		stub = OpenTSDBServiceGrpc.newStub(channel);
@@ -67,12 +67,12 @@ public class TestPlugin {
 	 */
 	public static void main(String[] args) {		
 		LOG.info("Testing gRPC Plugin");
-		Logger log = LoggerFactory.getLogger("io.grpc");
-		((ch.qos.logback.classic.Logger)log).setLevel(ch.qos.logback.classic.Level.DEBUG);
+//		Logger log = LoggerFactory.getLogger("io.grpc");
+//		((ch.qos.logback.classic.Logger)log).setLevel(ch.qos.logback.classic.Level.DEBUG);
 		TestPlugin tp = new TestPlugin();
-		//tp.aggrs();
-		//		tp.addDataPoints();
-		tp.streamDataPoints2();
+//		tp.aggrs();
+		tp.addDataPoints();
+//		tp.streamDataPoints2();
 		try {
 			System.in.read();
 			LOG.info("Shutting Down...");
@@ -87,7 +87,7 @@ public class TestPlugin {
 	}
 	
 	public void streamDataPoints2() {
-		StreamingHelper<DataPoint,PutDatapointsResponse> stream = new StreamingHelper<>(channel, OpenTSDBServiceGrpc.getPutsMethod(), 
+		StreamingHelper2<DataPoint,PutDatapointsResponse> stream = new StreamingHelper2<>(channel, OpenTSDBServiceGrpc.getPutsMethod(), 
 				r -> {
 					if(r.getFinalResponse()) {
 						LOG.info("Final: {}", r);
@@ -238,7 +238,7 @@ public class TestPlugin {
 			for(int i = 0; i < 10000; i++) {
 				pd.addDataPoints(
 						DataPoint.newBuilder()
-						.setMetric("xx:x" + i)
+						.setMetric("xxx" + i)
 						.setMetricTags(mtags)
 						.setTimestamp(System.currentTimeMillis())
 						.setValue(i * 13)
