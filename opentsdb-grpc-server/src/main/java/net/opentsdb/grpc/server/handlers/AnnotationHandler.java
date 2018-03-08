@@ -158,7 +158,7 @@ public class AnnotationHandler extends AbstractHandler implements  AnnotationHan
 				createRequests.increment();
 				Annotation a = ProtoConverters.from(value);
 				Deferred<Boolean> def = a.syncToStorage(tsdb, false);
-				SuAsyncHelpers.singleTCallback(def, 
+				SuAsyncHelpers.singleTCallbacks(def, 
 						bool -> {
 							if(bool) {
 								_okCreates.increment();

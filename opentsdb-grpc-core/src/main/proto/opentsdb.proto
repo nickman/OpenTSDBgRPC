@@ -13,15 +13,15 @@ service OpenTSDBService {
 	rpc S(ContentName) returns (Content) {}
 	rpc GetAggregators(Empty) returns (AggregatorNames) {}
 	rpc GetAnnotation(AnnotationRequest) returns (TSDBAnnotation) {}
-	rpc CreateAnnotations(stream TSDBAnnotation) returns (stream TSDBAnnotation) {}
-	rpc UpdateAnnotations(stream TSDBAnnotation) returns (stream TSDBAnnotation) {}
+	rpc CreateAnnotations(stream TSDBAnnotation) returns (stream CreateAnnotationResponse) {}
+	rpc UpdateAnnotations(stream TSDBAnnotation) returns (stream CreateAnnotationResponse) {}
 	rpc DeleteAnnotations(TSDBAnnotation) returns (TSDBAnnotation) {}
 	rpc BulkDeleteAnnotations(BulkAnnotationRequest) returns (BulkAnnotationResponse) {}
 	rpc GetConfiguration(Empty) returns (KeyValues) {}
 	rpc GetFilterMetas(Empty) returns (FilterMetas) {}
 	rpc DropCaches(Empty) returns (Empty) {}
 	rpc Put(PutDatapoints) returns (PutDatapointsResponse) {}	
-	rpc Puts(stream DataPoint) returns (stream PutDatapointsResponse) {}
+	rpc Puts(stream PutDatapoints) returns (stream PutDatapointsResponse) {}
 	
 	rpc AssignUid(Assignment) returns (Uid) {}
 	rpc AssignUids(stream Assignment) returns (stream Uid) {}
@@ -96,6 +96,18 @@ message AnnotationRequest {
 	TsuidBorS tsuid  = 2;
 }
 
+message CreateAnnotationResponse {
+	int64 success = 1;
+	int64 failed = 2;
+	bool finalResponse = 3;
+	repeated CreateAnnotationError errors = 4;
+}
+
+message CreateAnnotationError {
+	string error = 1;
+	TSDBAnnotation annotation = 2;
+}
+
 message RelativeTime {
 	int64 time = 1;
 	string unit = 2; 
@@ -144,8 +156,7 @@ message FilterMetas {
 }
 
 message MetricTags {
-	string metric = 1;
-	map<string, string> tags = 2;
+	map<string, string> tags = 1;
 }
 
 message DataPoint {
@@ -154,6 +165,10 @@ message DataPoint {
 	int64 timestamp = 3;
 	double value = 4;
 	Aggregation aggregation = 5;
+}
+
+message DataPoints {
+	repeated DataPoint datapoints = 1;
 }
 
 message PutOptions {

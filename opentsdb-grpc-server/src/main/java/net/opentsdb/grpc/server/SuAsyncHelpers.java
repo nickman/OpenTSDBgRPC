@@ -12,6 +12,7 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.grpc.server;
 
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import com.stumbleupon.async.Callback;
@@ -25,7 +26,7 @@ import com.stumbleupon.async.Deferred;
  */
 
 public class SuAsyncHelpers {
-	public static <T> void singleTCallback(Deferred<T> def, Consumer<T> ok, Consumer<Throwable> err) {
+	public static <T> void singleTCallbacks(Deferred<T> def, Consumer<T> ok, Consumer<Throwable> err) {
 		def.addCallbacks(
 				new Callback<Void, T>() {
 					@Override
@@ -44,4 +45,51 @@ public class SuAsyncHelpers {
 				}
 		);
 	}
+	
+	public static <T> void singleTCallback(Deferred<T> def, Consumer<T> ok) {
+		def.addErrback(
+				new Callback<Void, T>() {
+					@Override
+					public Void call(T t) throws Exception {
+						ok.accept(t);
+						return null;
+					}
+					
+				}
+		);
+	}
+	
+	public static <T> void singleTErrback(Deferred<T> def, Consumer<Throwable> err) {
+		def.addErrback(
+				new Callback<Void, Throwable>() {
+					@Override
+					public Void call(Throwable t) throws Exception {
+						err.accept(t);
+						return null;
+					}					
+				}				
+		);
+	}
+	
+	public static <T> void singleTBoth(Deferred<T> def, BiConsumer<T, Throwable> cb) {
+		def.addCallbacks(
+				new Callback<Void, T>() {
+					@Override
+					public Void call(T t) throws Exception {
+						cb.accept(t, null);
+						return null;
+					}
+					
+				},
+				new Callback<Void, Throwable>() {
+					@Override
+					public Void call(Throwable t) throws Exception {
+						cb.accept(null, t);
+						return null;
+					}					
+				}
+		);
+		
+	}
+	
 }

@@ -19,6 +19,7 @@ import com.google.protobuf.ByteString;
 
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.core.Aggregators;
+import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.AggregatorName;
 import net.opentsdb.grpc.AggregatorNames;
@@ -30,7 +31,6 @@ import net.opentsdb.grpc.Content;
 import net.opentsdb.grpc.ContentName;
 import net.opentsdb.grpc.Count;
 import net.opentsdb.grpc.CreateAnnotationResponse;
-import net.opentsdb.grpc.DataPoint;
 import net.opentsdb.grpc.Empty;
 import net.opentsdb.grpc.FilterMeta;
 import net.opentsdb.grpc.FilterMetas;
@@ -150,14 +150,16 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 		return annHandler.createAnnotations(responseObserver);
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#updateAnnotations(io.grpc.stub.StreamObserver)
-	 */
-	@Override
-	public StreamObserver<TSDBAnnotation> updateAnnotations(StreamObserver<TSDBAnnotation> responseObserver) {
-		return annHandler.updateAnnotations(responseObserver);
-	}
+//	/**
+//	 * {@inheritDoc}
+//	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#updateAnnotations(io.grpc.stub.StreamObserver)
+//	 */
+//	@Override
+//	public StreamObserver<TSDBAnnotation> updateAnnotations(StreamObserver<TSDBAnnotation> responseObserver) {
+//		return annHandler.updateAnnotations(responseObserver);
+//	}
+	
+	
 
 	/**
 	 * {@inheritDoc}
@@ -234,7 +236,7 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#puts(io.grpc.stub.StreamObserver)
 	 */
 	@Override
-	public StreamObserver<DataPoint> puts(StreamObserver<PutDatapointsResponse> responseObserver) {
+	public StreamObserver<PutDatapoints> puts(StreamObserver<PutDatapointsResponse> responseObserver) {
 		return putHandler.puts(responseObserver);
 	}
 

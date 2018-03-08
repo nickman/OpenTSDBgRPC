@@ -1,0 +1,8 @@
+{
+    "ID": "envoy-grpc-check",
+    "Name": "Envoy Service health status",
+    "GRPC": "127.0.0.1:10000",
+    "GRPCUseTLS": false,
+    "Interval": "10s",
+    "ServiceID": "HeliosLeopard-envoy-9901"
+}

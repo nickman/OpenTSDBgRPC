@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +53,8 @@ public class TestPlugin {
 	private final OpenTSDBServiceStub stub;
 	private final ManagedChannel channel;
 	private static final AtomicBoolean running = new AtomicBoolean(true);
+	
+	private static Thread main = null;
 
 	public TestPlugin() {
 		channel = ManagedChannelBuilder.forAddress("localhost", 10000)
@@ -69,12 +72,22 @@ public class TestPlugin {
 		LOG.info("Testing gRPC Plugin");
 //		Logger log = LoggerFactory.getLogger("io.grpc");
 //		((ch.qos.logback.classic.Logger)log).setLevel(ch.qos.logback.classic.Level.DEBUG);
-		TestPlugin tp = new TestPlugin();
+		
 //		tp.aggrs();
-		tp.addDataPoints();
+//		tp.addDataPoints();
 //		tp.streamDataPoints2();
+		main = Thread.currentThread();
+		IntStream.range(0, 1).parallel().forEach(idx -> {
+			
+			for(int i = 0; i < 200; i++) {
+				TestPlugin tp = new TestPlugin();
+				tp.streamer();
+				try { Thread.sleep(1000); } catch (Exception x) {}
+			}
+		});
+		
 		try {
-			System.in.read();
+			try { Thread.currentThread().join(); } catch (Exception x) {}
 			LOG.info("Shutting Down...");
 			running.set(false);
 		} catch (Exception ex) {
@@ -86,146 +99,61 @@ public class TestPlugin {
 		
 	}
 	
-	public void streamDataPoints2() {
-		StreamingHelper2<DataPoint,PutDatapointsResponse> stream = new StreamingHelper2<>(channel, OpenTSDBServiceGrpc.getPutsMethod(), 
-				r -> {
-					if(r.getFinalResponse()) {
-						LOG.info("Final: {}", r);
-					}
-				},
-				str -> {
-					LOG.info("Complete");
-					LOG.info("FINAL STATS: {}", str.printStats());
+	public void streamer() {
+		ManagedChannel mc = ManagedChannelBuilder.forAddress("localhost", 10000)
+				.usePlaintext(true)				
+				.build();
+		try {
+			BidiStreamer<PutDatapoints,PutDatapointsResponse> stream = new BidiStreamer<>(mc, OpenTSDBServiceGrpc.getPutsMethod(), 
+					r -> {
+						if(r.getFinalResponse()) {
+							LOG.info("Final: {}", r);
+						}
+					},
+					str -> {
+						LOG.info("Complete");
+						LOG.info("FINAL STATS: {}", str.printStats());
+					},
+					pdr -> {
+						return pdr.getFinalResponse();
+					},
+					in -> in.getDataPointsCount(),
+					out -> (int)(out.getFailed() + out.getSuccess())
+			);		
+			Map<String, String> tags = new HashMap<>();
+			tags.put("foo", "bar");
+			MetricTags mtags = MetricTags.newBuilder().putAllTags(tags).build();
+			stream.startStream();		
+			int total = 0;
+			for(int x = 0; x < 10; x++) {
+				PutDatapoints.Builder pdb = PutDatapoints.newBuilder();
+				for(int i = 0; i < 10000; i++) {
+					DataPoint dp = DataPoint.newBuilder()
+							.setMetric(i==300 ? ("xxx" + i) : ("xxx" + i))
+							.setMetricTags(mtags)
+							.setTimestamp(System.currentTimeMillis())
+							.setValue(i * 13)
+							.build();
+					pdb.addDataPoints(dp);
+					total++;
 				}
-		);		
-		Map<String, String> tags = new HashMap<>();
-		tags.put("foo", "bar");
-		MetricTags mtags = MetricTags.newBuilder().putAllTags(tags).build();
-		stream.startStream();
-		for(int i = 0; i < 10000; i++) {
-			DataPoint dp = DataPoint.newBuilder()
-					.setMetric(i==300 ? ("xxx" + i) : ("xxx" + i))
-					.setMetricTags(mtags)
-					.setTimestamp(System.currentTimeMillis())
-					.setValue(i * 13)
-					.build();
-			stream.blockingSend(dp);
-			if(i > 0 && i%1000==0) {
-				LOG.info("Streamer Stats: \n{}", stream.printStats());
+				stream.send(pdb.build());
 			}
+			stream.clientComplete();
+			LOG.info("Sent {} Datapoints", total);
+			if(stream.waitForCompletion(5, TimeUnit.SECONDS)) {
+				LOG.info("Streamer Closed Successfully");
+			} else {
+				System.err.println("Streamer NOT Closed Successfully. Stats:" + stream.printStats());
+			}
+		} finally {
+			try { mc.shutdown(); } catch (Exception x) {}
 		}
-		stream.halfClose();
+		//main.interrupt();
 
 	}
-
-	public void streamDataPoints() {
-		Map<String, String> tags = new HashMap<>();
-		tags.put("foo", "bar");
-		MetricTags mtags = MetricTags.newBuilder().putAllTags(tags).build();
-		final CountDownLatch latch = new CountDownLatch(1);
-		final LongAdder dpCount = new LongAdder();
-		final LongAdder dpFailed = new LongAdder();
-		final LongAdder dpSent = new LongAdder();		
-		final AtomicInteger inFlight = new AtomicInteger();
-		final long startTime = System.currentTimeMillis();
-
-		StreamObserver<DataPoint> stream = stub
-				.withCompression("gzip")
-				.puts(new StreamObserver<PutDatapointsResponse>() {
-
-					@Override
-					public void onNext(PutDatapointsResponse pdr) {
-						//LOG.info("Puts Response: {}", pdr);
-
-						if(pdr.getFinalResponse()) {
-							LOG.info("DataPoint Stream Closing: {}", pdr);
-							latch.countDown();
-						} else {
-							dpFailed.add(pdr.getFailed());
-							dpCount.add(pdr.getSuccess());
-						}
-						inFlight.decrementAndGet();
-					}
-
-					@Override
-					public void onError(Throwable t) {		try {
-						LOG.info("Waiting for clean stream close");
-						if(!latch.await(10, TimeUnit.SECONDS)) {
-							LOG.error("Timed out waiting for clean stream completion");
-						}
-					} catch(Exception ex) {
-						LOG.error("Interrupted while waiting for clean stream completion", ex);
-					}
-
-					dpCount.increment();
-					LOG.warn("Puts Error", t);
-					latch.countDown();
-					}
-
-					@Override
-					public void onCompleted() {
-						LOG.info("Done: elapsed:{}, sent={}, success={}, failed={}", 
-								System.currentTimeMillis()-startTime, 
-								dpSent.longValue(), dpCount.longValue(), 
-								dpFailed.longValue()
-								);
-					}
-
-				});
-		ClientCallStreamObserver<DataPoint> so =
-				(ClientCallStreamObserver<DataPoint>) stream;	
-		while(running.get()) {
-			for(int i = 0; i < 10000; i++) {
-				so.onNext(DataPoint.newBuilder()
-						.setMetric(i==300 ? ("x:xx" + i) : ("xxx" + i))
-						.setMetricTags(mtags)
-						.setTimestamp(System.currentTimeMillis())
-						.setValue(i * 13)
-						.build());
-				dpSent.increment();
-				inFlight.incrementAndGet();
-				//			try {
-				//				if(sending.get().await(1000, TimeUnit.MILLISECONDS)) {
-				//					dpSent.increment();
-				//				} else {			dpSent.increment();
-				inFlight.incrementAndGet();
-
-				//					LOG.info("Timeouts: t={}, sent={}", timeouts.incrementAndGet(), dpSent.longValue());
-				//				}
-				//			} catch (InterruptedException iex) {
-				//				iex.printStackTrace(System.err);
-				//			}
-			}
-			LOG.info("InFlight={}, sent={}, success={}, failed={}", inFlight.get(), dpSent.longValue(), dpCount.longValue(), dpFailed.longValue());
-			try { Thread.sleep(2000); } catch (Exception x) {}
-		}
-		LOG.info("Waiting for {} in flight requests", inFlight.get());
-		final long timeOutAt = System.currentTimeMillis() + 5000;
-		while(inFlight.get() > 0) {
-			try {
-				Thread.currentThread().join(1);
-				int pending = inFlight.get(); 
-				if(pending < 1) {
-					break;
-				}
-				if(System.currentTimeMillis() > timeOutAt) {
-					LOG.error("Timedout waiting on {} pending in flight requests", pending);
-				}
-			} catch (InterruptedException ex) {
-				LOG.error("Thread interrupted waiting on in flight requests");
-			}
-		}
-		//		try {
-		//			LOG.info("Waiting for clean stream close");
-		//			if(!latch.await(10, TimeUnit.SECONDS)) {
-		//				LOG.error("Timed out waiting for clean stream completion");
-		//			}
-		//		} catch(Exception ex) {
-		//			LOG.error("Interrupted while waiting for clean stream completion", ex);
-		//		}
-		so.onCompleted();
-		LOG.info("Done");
-	}
+	
+	
 
 	public void addDataPoints() {
 		// put(PutDatapoints request, StreamObserver<PutDatapointsResponse> responseObserver) 

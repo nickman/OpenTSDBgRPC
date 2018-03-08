@@ -17,13 +17,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 
 import com.stumbleupon.async.Callback;
 import com.stumbleupon.async.Deferred;
 
-import io.grpc.stub.ClientCallStreamObserver;
+import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.Aggregation;
@@ -36,7 +35,6 @@ import net.opentsdb.grpc.server.Configuration;
 import net.opentsdb.grpc.server.SuAsyncHelpers;
 import net.opentsdb.grpc.server.util.AccumulatingLongAdder;
 import net.opentsdb.grpc.server.util.RelTime;
-import net.opentsdb.stats.StatsCollector;
 
 /**
  * <p>Title: DataPointPutHandler</p>
@@ -86,53 +84,90 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 		super(tsdb, cfg);
 	}
 	
-	public StreamObserver<DataPoint> puts(StreamObserver<PutDatapointsResponse> responseObserver) {
-		LOG.info("Streaming DataPoints Initiated");
+	public StreamObserver<PutDatapoints> puts(StreamObserver<PutDatapointsResponse> responseObserver) {
+		LOG.info("Streaming DataPoints Initiated: ({})", responseObserver.getClass().getName());
+		ServerCallStreamObserver<PutDatapointsResponse> ro = (ServerCallStreamObserver<PutDatapointsResponse>)responseObserver;
 		final AtomicBoolean open = new AtomicBoolean(true);
 		activeStreams.incrementAndGet();
 		totalStreams.increment();
-		return new StreamObserver<DataPoint>() {			
+		
+		return new StreamObserver<PutDatapoints>() {			
 			final long startTime = System.currentTimeMillis();
 			final LongAdder _receivedDataPoints = new AccumulatingLongAdder(receivedDataPoints);
 			final LongAdder _okDataPoints = new AccumulatingLongAdder(okDataPoints);
 			final LongAdder _failedDataPoints = new AccumulatingLongAdder(failedDataPoints);
 			
 			@Override
-			public void onNext(DataPoint dp) {
-				_receivedDataPoints.increment();
+			public void onNext(PutDatapoints datapoints) {
+				int dpSize = datapoints.getDataPointsCount();
+				LOG.info("Received {} Datapoints", dpSize);
+				_receivedDataPoints.add(dpSize);
+				final LongAdder oks = new LongAdder();
+				final LongAdder errs = new LongAdder();
 				try {
-					double dval = dp.getValue();
-					long lval = (long)dval;
-					double fpart = dval - lval;
-					boolean isDouble = fpart==0D;
-					Deferred<Object> def = null;
-					if(isDouble) {
-						def = tsdb.addPoint(dp.getMetric(), dp.getTimestamp(), dval, dp.getMetricTags().getTagsMap());
-					} else {
-						def = tsdb.addPoint(dp.getMetric(), dp.getTimestamp(), lval, dp.getMetricTags().getTagsMap());
-					}
-					SuAsyncHelpers.singleTCallback(def, 
-							obj -> {
-								_okDataPoints.increment();
-								responseObserver.onNext(PutDatapointsResponse.newBuilder().setSuccess(1).build());
-							}, 
-							err -> {
-								responseObserver.onNext(response(dp, err));
-								_failedDataPoints.increment();
-								LOG.warn("DataPoint put failed: {}", dp, err);
+					List<Deferred<Object>> defs = new ArrayList<>(dpSize);
+					for(int idx = 0; idx < dpSize; idx ++) {
+						if(!open.get()) {
+							LOG.info("Puts cancelled. Breaking.");
+							break;
+						}
+						DataPoint dp = datapoints.getDataPoints(idx);
+						try {						
+							double dval = dp.getValue();
+							long lval = (long)dval;
+							double fpart = dval - lval;
+							boolean isDouble = fpart==0D;
+							Deferred<Object> def = null;
+							if(isDouble) {
+								def = tsdb.addPoint(dp.getMetric(), dp.getTimestamp(), dval, dp.getMetricTags().getTagsMap());
+							} else {
+								def = tsdb.addPoint(dp.getMetric(), dp.getTimestamp(), lval, dp.getMetricTags().getTagsMap());
 							}
+							
+							SuAsyncHelpers.singleTCallbacks(def, 
+									obj -> {
+										_okDataPoints.increment();
+										oks.increment();
+	//									responseObserver.onNext(PutDatapointsResponse.newBuilder().setSuccess(1).build());
+									}, 
+									err -> {
+	//									responseObserver.onNext(response(dp, err));
+										_failedDataPoints.increment();
+										errs.increment();
+										LOG.warn("DataPoint put failed: {}", dp, err);
+									}
+							);
+						} catch (Exception err) {
+	//						responseObserver.onNext(response(dp, err));
+							_failedDataPoints.increment();
+							errs.increment();
+							LOG.warn("Failed to handle DataPoint: {}", dp, err);
+						}
+					}
+					if(!open.get()) {
+						LOG.info("Puts cancelled.");	
+						return;
+					}
+					
+					SuAsyncHelpers.singleTCallbacks(Deferred.group(defs),
+							obj -> responseObserver.onNext(response(oks.intValue(), errs.intValue(), false)),
+							err -> responseObserver.onNext(response(oks.intValue(), errs.intValue(), false))
 					);
-				} catch (Exception err) {
-					responseObserver.onNext(response(dp, err));
-					_failedDataPoints.increment();					
-					LOG.warn("Failed to handle DataPoint: {}", dp, err);
+					// send response				
+					
+				} catch (Exception ex) {
+					LOG.error("DP Failure", ex);
 				}
 			}
 
 			@Override
 			public void onError(Throwable t) {
-				LOG.error("Streaming DataPoints Error", t);
-				LOG.info("Streaming DataPoints Progress: ok={}, failed={}, elapsed={}", _okDataPoints.longValue(), _failedDataPoints.longValue(), System.currentTimeMillis()-startTime);				
+				if(t.getMessage().contains("CANCELLED:")) {
+					LOG.info("Streaming DataPoints Closed By Client: ok={}, failed={}, elapsed={}", _okDataPoints.longValue(), _failedDataPoints.longValue(), System.currentTimeMillis()-startTime);
+				} else {
+					LOG.error("Streaming DataPoints Error", t);
+					LOG.info("Streaming DataPoints Progress: ok={}, failed={}, elapsed={}", _okDataPoints.longValue(), _failedDataPoints.longValue(), System.currentTimeMillis()-startTime);				
+				}
 				if(open.compareAndSet(true, false)) {
 					activeStreams.decrementAndGet();
 				}
@@ -141,9 +176,13 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 			@Override
 			public void onCompleted() {
 				try {
-					LOG.info("Streaming DataPoints Complete: dps={}, elapsed={}", _okDataPoints.longValue(), System.currentTimeMillis()-startTime);
-					responseObserver.onNext(response(_okDataPoints.longValue(), _failedDataPoints.longValue()));
-					responseObserver.onCompleted();
+					if(open.get()) {
+						LOG.info("Streaming DataPoints Complete: dps={}, elapsed={}", _okDataPoints.longValue(), System.currentTimeMillis()-startTime);
+						responseObserver.onNext(response(_okDataPoints.longValue(), _failedDataPoints.longValue(), true));
+						responseObserver.onCompleted();
+					} else {
+						LOG.info("Supressed Response due to cancellation");
+					}
 				} finally {
 					if(open.compareAndSet(true, false)) {
 						activeStreams.decrementAndGet();
@@ -156,17 +195,20 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 	}
 	
 	/**
-	 * Builds and returns a final PutDatapointsResponse
+	 * Builds and returns a PutDatapointsResponse
 	 * @param ok The number of successful datapoints
 	 * @param err The number of failed datapoints
+	 * @param finalResponse true if final, false otherwise
 	 * @return the final PutDatapointsResponse
 	 */
-	protected PutDatapointsResponse response(long ok, long err) {
-		return PutDatapointsResponse.newBuilder()
+	protected PutDatapointsResponse response(long ok, long err, boolean finalResponse) {
+		PutDatapointsResponse pdr = PutDatapointsResponse.newBuilder()
 				.setFailed(err)
 				.setSuccess(ok)
-				.setFinalResponse(true)
+				.setFinalResponse(finalResponse)
 				.build();
+		LOG.info("Sending PDR: ok={}, failed={}, final={}", ok, err, finalResponse);
+		return pdr;
 	}
 	
 	/**

@@ -52,8 +52,10 @@ import org.slf4j.LoggerFactory;
 import com.stumbleupon.async.Deferred;
 
 import io.grpc.Server;
+import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.services.HealthStatusManager;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.epoll.EpollChannelOption;
 import io.netty.channel.epoll.EpollEventLoopGroup;
@@ -94,6 +96,8 @@ public class GRPCPlugin extends RpcPlugin {
 	
 	private final AtomicBoolean started = new AtomicBoolean(false);
 	
+	private final HealthStatusManager healthStatusManager = new HealthStatusManager();
+	
 	
 	/**
 	 * {@inheritDoc}
@@ -111,6 +115,7 @@ public class GRPCPlugin extends RpcPlugin {
 			initServer();
 			start();
 			logConfig();
+			healthStatusManager.setStatus("", ServingStatus.SERVING);
 		} catch (Exception ex) {
 			throw new IllegalArgumentException("Failed to start GRPCPlugin", ex);
 		}
@@ -155,9 +160,11 @@ public class GRPCPlugin extends RpcPlugin {
 		RelTime maxConnAgeGrace = cfg.config(GRPC_MAX_CONN_AGE_GRACE, DEFAULT_GRPC_MAX_CONN_AGE_GRACE);
 		RelTime maxConnIdle = cfg.config(GRPC_MAX_CONN_IDLE, DEFAULT_GRPC_MAX_CONN_IDLE);		
 		NettyServerBuilder serverBuilder = NettyServerBuilder.forAddress(sa);
+		healthStatusManager.setStatus("", ServingStatus.NOT_SERVING);
 		serverBuilder
 			.addService(server)
 			.addService(ProtoReflectionService.newInstance())
+			.addService(healthStatusManager.getHealthService())
 			.bossEventLoopGroup(bossGroup)
 			.workerEventLoopGroup(workerGroup)
 			.channelType(cfg.isEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
@@ -232,6 +239,7 @@ public class GRPCPlugin extends RpcPlugin {
 	 */
 	@Override
 	public Deferred<Object> shutdown() {
+		healthStatusManager.setStatus("", ServingStatus.NOT_SERVING);
 		final Deferred<Object> def = new Deferred<Object>();
 		if(started.compareAndSet(true, false)) {
 			LOG.info("Stopping Netty gRPC Server ....");
