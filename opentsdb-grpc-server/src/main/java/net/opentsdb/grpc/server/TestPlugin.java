@@ -14,22 +14,16 @@ package net.opentsdb.grpc.server;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.LongAdder;
-import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.grpc.Channel;
+import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.MethodDescriptor;
-import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.grpc.AggregatorNames;
 import net.opentsdb.grpc.DataPoint;
@@ -40,6 +34,8 @@ import net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceStub;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
 import net.opentsdb.grpc.PutOptions;
+import net.opentsdb.grpc.server.streaming.client.BidiStreamer;
+import net.opentsdb.grpc.server.streaming.client.StreamerBuilder;
 
 /**
  * <p>Title: TestPlugin</p>
@@ -79,7 +75,7 @@ public class TestPlugin {
 		main = Thread.currentThread();
 		IntStream.range(0, 1).parallel().forEach(idx -> {
 			
-			for(int i = 0; i < 200; i++) {
+			for(int i = 0; i < 1; i++) {
 				TestPlugin tp = new TestPlugin();
 				tp.streamer();
 				try { Thread.sleep(1000); } catch (Exception x) {}
@@ -104,30 +100,25 @@ public class TestPlugin {
 				.usePlaintext(true)				
 				.build();
 		try {
-			BidiStreamer<PutDatapoints,PutDatapointsResponse> stream = new BidiStreamer<>(mc, OpenTSDBServiceGrpc.getPutsMethod(), 
-					r -> {
-						if(r.getFinalResponse()) {
-							LOG.info("Final: {}", r);
-						}
-					},
-					str -> {
-						LOG.info("Complete");
-						LOG.info("FINAL STATS: {}", str.printStats());
-					},
-					pdr -> {
-						return pdr.getFinalResponse();
-					},
-					in -> in.getDataPointsCount(),
-					out -> (int)(out.getFailed() + out.getSuccess())
-			);		
+			BidiStreamer<PutDatapoints,PutDatapointsResponse> stream = StreamerBuilder.newBuilder(channel, OpenTSDBServiceGrpc.getPutsMethod(), r -> {
+				if(r.getFinalResponse()) {
+					LOG.info("Final: {}", r);
+				}
+			})
+			.callOptions(CallOptions.DEFAULT.withCompression("gzip").withWaitForReady())
+			.finalResponse(pdr -> pdr.getFinalResponse())
+			.subItemsOut(out -> (int)(out.getFailed() + out.getSuccess()))
+			.subItemsIn(in -> in.getDataPointsCount())
+			.inQueueSize(10000)
+			.buildBidiStreamer();
 			Map<String, String> tags = new HashMap<>();
 			tags.put("foo", "bar");
 			MetricTags mtags = MetricTags.newBuilder().putAllTags(tags).build();
-			stream.startStream();		
+			stream.start();		
 			int total = 0;
-			for(int x = 0; x < 10; x++) {
+			for(int x = 0; x < 1; x++) {
 				PutDatapoints.Builder pdb = PutDatapoints.newBuilder();
-				for(int i = 0; i < 10000; i++) {
+				for(int i = 0; i < 100; i++) {
 					DataPoint dp = DataPoint.newBuilder()
 							.setMetric(i==300 ? ("xxx" + i) : ("xxx" + i))
 							.setMetricTags(mtags)
@@ -141,7 +132,7 @@ public class TestPlugin {
 			}
 			stream.clientComplete();
 			LOG.info("Sent {} Datapoints", total);
-			if(stream.waitForCompletion(5, TimeUnit.SECONDS)) {
+			if(stream.waitForCompletion(10, TimeUnit.SECONDS)) {
 				LOG.info("Streamer Closed Successfully");
 			} else {
 				System.err.println("Streamer NOT Closed Successfully. Stats:" + stream.printStats());

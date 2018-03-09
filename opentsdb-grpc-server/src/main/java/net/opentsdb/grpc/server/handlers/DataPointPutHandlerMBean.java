@@ -12,6 +12,8 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.grpc.server.handlers;
 
+import java.util.Date;
+
 /**
  * <p>Title: DataPointPutHandlerMBean</p>
  * <p>Description: JMX interface for {@link DataPointPutHandler}</p> 
@@ -50,5 +52,18 @@ public interface DataPointPutHandlerMBean {
 	 * @return the total number of failed datapoints
 	 */
 	public long getFailedDataPoints();
+	
+	/**
+	 * Returns the timestamp of the last comm to this handler
+	 * @return a long UTC timestamp
+	 */
+	public long getLastComm();
+	
+	/**
+	 * Returns the date of the last comm to this handler
+	 * @return a date
+	 */
+	public Date getLastCommDate();
+	
 
 }

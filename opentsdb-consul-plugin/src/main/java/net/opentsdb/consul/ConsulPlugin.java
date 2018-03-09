@@ -152,7 +152,7 @@ public class ConsulPlugin extends StartupPlugin {
 			
 			ns.setCheck(check);
 			client.agentServiceRegister(ns);
-			LOG.info("Registered OpenTSDB HTTP Service");
+			LOG.info("Registered OpenTSDB HTTP Service: checkInterval={}, dereg:={}", checkInterval, deregisterAfter);
 			
 			if(grpcPort != -1) {
 				grpcServiceId = "grpc-opentsdb@" + HOSTNAME + "/" + listenerAddress + ":" + grpcPort;
@@ -169,7 +169,7 @@ public class ConsulPlugin extends StartupPlugin {
 				ns.setCheck(check);
 				// TODO: Figure out how to register a grpc health check
 				client.agentServiceRegister(ns);
-				LOG.info("Registered OpenTSDB gRPC Service");
+				LOG.info("Registered OpenTSDB gRPC Service: checkInterval={}, dereg:={}", checkInterval, deregisterAfter);
 			}
 		} catch (Exception ex) {
 			LOG.error("Failed to register", ex);

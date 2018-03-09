@@ -1,4 +1,4 @@
-/home/nwhitehead/oprojects/opentsdb-consul-plugin/src/main/java/net/opentsdb/consul/IsolatedClassLoader.java
-/home/nwhitehead/oprojects/opentsdb-consul-plugin/src/main/java/net/opentsdb/consul/BootStartupPlugin.java
-/home/nwhitehead/oprojects/opentsdb-consul-plugin/src/main/java/net/opentsdb/consul/utils/NetUtils.java
-/home/nwhitehead/oprojects/opentsdb-consul-plugin/src/main/java/net/opentsdb/consul/ConsulPlugin.java
+/home/nwhitehead/oprojects/OpenTSDBgRPC/opentsdb-consul-plugin/src/main/java/net/opentsdb/consul/IsolatedClassLoader.java
+/home/nwhitehead/oprojects/OpenTSDBgRPC/opentsdb-consul-plugin/src/main/java/net/opentsdb/consul/ConsulPlugin.java
+/home/nwhitehead/oprojects/OpenTSDBgRPC/opentsdb-consul-plugin/src/main/java/net/opentsdb/consul/BootStartupPlugin.java
+/home/nwhitehead/oprojects/OpenTSDBgRPC/opentsdb-consul-plugin/src/main/java/net/opentsdb/consul/utils/NetUtils.java

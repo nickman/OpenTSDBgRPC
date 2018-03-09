@@ -27,6 +27,7 @@ import io.grpc.stub.StreamObserver;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.Aggregation;
 import net.opentsdb.grpc.DataPoint;
+import net.opentsdb.grpc.OpenTSDBServiceGrpc;
 import net.opentsdb.grpc.PutDatapointError;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
@@ -55,18 +56,37 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 	protected final LongAdder failedDataPoints = new LongAdder();
 	
 	
+	
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.grpc.server.handlers.DataPointPutHandlerMBean#getReceivedDataPoints()
+	 */
 	public long getReceivedDataPoints() {
 		return receivedDataPoints.longValue();
 	}
 	
 	
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.grpc.server.handlers.DataPointPutHandlerMBean#getProcessedDataPoints()
+	 */
 	public long getProcessedDataPoints() {
 		return okDataPoints.longValue();
 	}
 	
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.grpc.server.handlers.DataPointPutHandlerMBean#getFailedDataPoints()
+	 */
 	public long getFailedDataPoints() {
 		return failedDataPoints.longValue();
 	}
+	
+	public static void main(String[] args) {
+		System.out.println("MD: [" + OpenTSDBServiceGrpc.getPutsMethod().getFullMethodName() + "]");
+	}
+
+	
 	
 	@Override
 	protected void doStats(GrpcStatsCollector collector) {
@@ -87,6 +107,7 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 	public StreamObserver<PutDatapoints> puts(StreamObserver<PutDatapointsResponse> responseObserver) {
 		LOG.info("Streaming DataPoints Initiated: ({})", responseObserver.getClass().getName());
 		ServerCallStreamObserver<PutDatapointsResponse> ro = (ServerCallStreamObserver<PutDatapointsResponse>)responseObserver;
+		
 		final AtomicBoolean open = new AtomicBoolean(true);
 		activeStreams.incrementAndGet();
 		totalStreams.increment();
@@ -99,6 +120,7 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 			
 			@Override
 			public void onNext(PutDatapoints datapoints) {
+				lastComm.set(System.currentTimeMillis());
 				int dpSize = datapoints.getDataPointsCount();
 				LOG.info("Received {} Datapoints", dpSize);
 				_receivedDataPoints.add(dpSize);
@@ -128,6 +150,7 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 									obj -> {
 										_okDataPoints.increment();
 										oks.increment();
+//										LOG.info("dpoint written: total={}", oks.longValue());
 	//									responseObserver.onNext(PutDatapointsResponse.newBuilder().setSuccess(1).build());
 									}, 
 									err -> {
@@ -137,6 +160,7 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 										LOG.warn("DataPoint put failed: {}", dp, err);
 									}
 							);
+							defs.add(def);
 						} catch (Exception err) {
 	//						responseObserver.onNext(response(dp, err));
 							_failedDataPoints.increment();
@@ -148,12 +172,13 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 						LOG.info("Puts cancelled.");	
 						return;
 					}
-					
-					SuAsyncHelpers.singleTCallbacks(Deferred.group(defs),
-							obj -> responseObserver.onNext(response(oks.intValue(), errs.intValue(), false)),
-							err -> responseObserver.onNext(response(oks.intValue(), errs.intValue(), false))
-					);
-					// send response				
+					LOG.info("Grouping DPoint Deferreds: {}", defs.size());
+					SuAsyncHelpers.singleTBoth(Deferred.group(defs), (o,t) -> {
+						if(t!=null) {
+							LOG.error("Batch Write Failed", t);							
+						}
+						responseObserver.onNext(response(oks.longValue(), errs.longValue(), false));
+					});
 					
 				} catch (Exception ex) {
 					LOG.error("DP Failure", ex);

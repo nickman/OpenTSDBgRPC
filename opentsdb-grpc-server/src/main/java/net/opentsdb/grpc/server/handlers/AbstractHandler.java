@@ -13,7 +13,9 @@
 package net.opentsdb.grpc.server.handlers;
 
 import java.lang.management.ManagementFactory;
+import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 
 import javax.management.MBeanServer;
@@ -53,6 +55,8 @@ public abstract class AbstractHandler {
 	protected final AtomicInteger activeStreams = new AtomicInteger();
 	/** The total number of created streams for this handler */
 	protected final LongAdder totalStreams = new LongAdder();
+	
+	protected final AtomicLong lastComm = new AtomicLong(0);	
 
 	
 	
@@ -93,6 +97,14 @@ public abstract class AbstractHandler {
 		gcollector.recordGrpc("totalstreams", totalStreams.longValue());
 		
 	}
+	
+	public long getLastComm() {
+		return lastComm.get();
+	}
+	
+	public Date getLastCommDate() {
+		return new Date(lastComm.get());
+	}	
 	
 	/**
 	 * Collects handler stats
