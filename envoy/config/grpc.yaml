@@ -29,9 +29,13 @@ static_resources:
                 route:
                   cluster: OpenTSDBGRPC
               - match:
-                  prefix: /
+                  prefix: /api
                 route:
                   cluster: OpenTSDB
+              - match:
+                  prefix: /
+                route:
+                  cluster: OpenTSDB-UI
 
           http_filters:
           - name: envoy.router
@@ -62,6 +66,16 @@ static_resources:
         api_config_source:
           api_type: GRPC
           cluster_names: [oxds_cluster]
+  - name: OpenTSDB-UI
+    connect_timeout: 0.250s
+    lb_policy: ROUND_ROBIN
+    http_protocol_options: {}
+    type: EDS
+    eds_cluster_config:
+      eds_config:
+        api_config_source:
+          api_type: GRPC
+          cluster_names: [ui_cluster]
 
 
   - name: xds_cluster
@@ -78,6 +92,12 @@ static_resources:
     http2_protocol_options: {}
     hosts: [{ socket_address: { address: 127.0.0.1, port_value: 8054 }}]              
 
+  - name: ui_cluster
+    connect_timeout: 0.25s
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    http2_protocol_options: {}
+    hosts: [{ socket_address: { address: 127.0.0.1, port_value: 8055 }}]              
 
 
   # - name: tsdb_service_grpc
