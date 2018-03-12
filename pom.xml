@@ -153,7 +153,9 @@
 
     <modules>
         <module>opentsdb-grpc-core</module>
+        <module>opentsdb-grpc-plugin-common</module>
         <module>opentsdb-grpc-server</module>
+        <module>opentsdb-grpc-client</module>
         <module>opentsdb-consul-plugin</module>
     </modules>
 

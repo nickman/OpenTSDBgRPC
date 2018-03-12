@@ -30,6 +30,13 @@
         </dependency>
 
         <dependency>
+          <groupId>net.opentsdb</groupId>
+          <artifactId>opentsdb-plugin-common</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+        
+
+        <dependency>
               <groupId>io.netty</groupId>
               <artifactId>netty-transport-native-epoll</artifactId>
               <classifier>linux-x86_64</classifier>

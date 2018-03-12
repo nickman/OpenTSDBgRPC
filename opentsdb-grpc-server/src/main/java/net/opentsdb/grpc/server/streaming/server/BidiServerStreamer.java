@@ -29,8 +29,13 @@ public class BidiServerStreamer<T, R> extends AbstractServerStreamer<T, R> {
 	 * @param ss
 	 * @param responseObserver
 	 */
-	public BidiServerStreamer(StreamerBuilder<T, R> builder, ServerStats ss, StreamObserver<T> responseObserver) {
-		super(builder, ss, responseObserver);
+	public BidiServerStreamer(StreamerBuilder<T, R> builder, StreamerContext streamerContext, StreamObserver<R> responseObserver) {
+		super(builder, streamerContext, responseObserver);
+	}
+	
+	public BidiServerStreamer<T,R> start() {
+		super.start();
+		return this;
 	}
 
 }

@@ -12,32 +12,7 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.grpc.server;
 
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_GRPC_FLOW_CONTROL;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_GRPC_KEEP_ALIVE;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_GRPC_KEEP_ALIVE_TIMEOUT;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_GRPC_MAX_CALLS_PER_CONN;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_GRPC_MAX_CONN_AGE;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_GRPC_MAX_CONN_AGE_GRACE;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_GRPC_MAX_CONN_IDLE;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_GRPC_MAX_HEADERLIST_SIZE;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_GRPC_MAX_MESSAGE_SIZE;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_GRPC_PERMIT_KEEP_ALIVE;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_GRPC_PERMIT_KEEP_ALIVE_TIME;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_IFACE;
-import static net.opentsdb.grpc.server.Configuration.DEFAULT_PORT;
-import static net.opentsdb.grpc.server.Configuration.GRPC_FLOW_CONTROL;
-import static net.opentsdb.grpc.server.Configuration.GRPC_IFACE;
-import static net.opentsdb.grpc.server.Configuration.GRPC_KEEP_ALIVE;
-import static net.opentsdb.grpc.server.Configuration.GRPC_KEEP_ALIVE_TIMEOUT;
-import static net.opentsdb.grpc.server.Configuration.GRPC_MAX_CALLS_PER_CONN;
-import static net.opentsdb.grpc.server.Configuration.GRPC_MAX_CONN_AGE;
-import static net.opentsdb.grpc.server.Configuration.GRPC_MAX_CONN_AGE_GRACE;
-import static net.opentsdb.grpc.server.Configuration.GRPC_MAX_CONN_IDLE;
-import static net.opentsdb.grpc.server.Configuration.GRPC_MAX_HEADERLIST_SIZE;
-import static net.opentsdb.grpc.server.Configuration.GRPC_MAX_MESSAGE_SIZE;
-import static net.opentsdb.grpc.server.Configuration.GRPC_PERMIT_KEEP_ALIVE;
-import static net.opentsdb.grpc.server.Configuration.GRPC_PERMIT_KEEP_ALIVE_TIME;
-import static net.opentsdb.grpc.server.Configuration.GRPC_PORT;
+import static net.opentsdb.plugin.common.Configuration.*;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -65,7 +40,8 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.server.netty.EventLoopThreadFactory;
-import net.opentsdb.grpc.server.util.RelTime;
+import net.opentsdb.plugin.common.Configuration;
+import net.opentsdb.plugin.common.util.RelTime;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.tsd.RpcPlugin;
 import net.opentsdb.utils.Config;

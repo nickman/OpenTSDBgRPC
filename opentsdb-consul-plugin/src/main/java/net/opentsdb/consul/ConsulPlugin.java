@@ -33,6 +33,7 @@ import com.stumbleupon.async.Deferred;
 
 import net.opentsdb.consul.utils.NetUtils;
 import net.opentsdb.core.TSDB;
+import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.stats.StatsCollector;
 import net.opentsdb.tools.StartupPlugin;
 import net.opentsdb.utils.Config;
@@ -63,6 +64,8 @@ public class ConsulPlugin extends StartupPlugin {
 	protected String httpServiceId = null;
 	protected String grpcServiceId = null;
 	
+	protected Configuration cfg = null;
+	
 	protected final CloseableHttpClient httpclient = HttpClients.createDefault();
 	
 	
@@ -72,42 +75,34 @@ public class ConsulPlugin extends StartupPlugin {
 	 */
 	@Override
 	public Config initialize(Config config) {
+		cfg = new Configuration(config);
 		return config;
 	}
 	
 	protected void lateInit(Config config) {
-		if(config.hasProperty("consul.endpoints")) {
-			consuls = NetUtils.uris(config.getString("consul.endpoints"));
-		}
 		tsdPort = config.getInt("tsd.network.port");
+		consuls = NetUtils.uris(cfg.config("consul.endpoints", "localhost:8500"));
+		grpcPort = cfg.config("grpc.server.port", -1);
+		listenerAddress = cfg.config("tsd.network.bind", (String)null);
 		
-		if(config.hasProperty("grpc.server.port")) {
-			grpcPort = config.getInt("grpc.server.port");
-		}
-		
-		if(config.hasProperty("tsd.network.bind")) {
-			listenerAddress = config.getString("tsd.network.bind");
-		}
-		if(NetUtils.isWildcard(listenerAddress)) {
+		if(listenerAddress==null || NetUtils.isWildcard(listenerAddress)) {
 			listenerAddress = NetUtils.getListenAddressOrLoopback();			
 		}
-		String modes = config.getString("tsd.mode");
+		
+		String modes = cfg.config("tsd.mode", "rw");
 		read = modes.contains("r");
 		write = modes.contains("w");
 		
-		if(config.hasProperty("consul.check.interval")) {
-			checkInterval = config.getString("consul.check.interval").trim();
-			if(!DURATION_PATTERN.matcher(checkInterval).matches()) {
-				throw new IllegalArgumentException("Invalid consul.check.interval: [" + checkInterval + "]");
-			}
+		checkInterval = cfg.config("consul.check.interval", "15s").trim();
+		if(!DURATION_PATTERN.matcher(checkInterval).matches()) {
+			throw new IllegalArgumentException("Invalid consul.check.interval: [" + checkInterval + "]");
 		}
-		if(config.hasProperty("consul.check.deregister")) {
-			deregisterAfter = config.getString("consul.check.deregister").trim();
-			if(!DURATION_PATTERN.matcher(deregisterAfter).matches()) {
-				throw new IllegalArgumentException("Invalid consul.check.deregister: [" + deregisterAfter + "]");
-			}
+		
+		deregisterAfter = cfg.config("consul.check.deregister", "2m").trim();
+		if(!DURATION_PATTERN.matcher(deregisterAfter).matches()) {
+			throw new IllegalArgumentException("Invalid consul.check.deregister: [" + deregisterAfter + "]");
 		}
-		LOG.info("TSD Port: {}, gRPC Port: {}, Address:{}, Consuls:{}", tsdPort, grpcPort, listenerAddress, Arrays.toString(consuls));
+		LOG.info("TSD Port={}, gRPC Port={}, Address={}, Consuls={}", tsdPort, grpcPort, listenerAddress, Arrays.toString(consuls));
 	}
 
 	/**
@@ -152,7 +147,7 @@ public class ConsulPlugin extends StartupPlugin {
 			
 			ns.setCheck(check);
 			client.agentServiceRegister(ns);
-			LOG.info("Registered OpenTSDB HTTP Service: checkInterval={}, dereg:={}", checkInterval, deregisterAfter);
+			LOG.info("Registered OpenTSDB HTTP Service: checkInterval={}, dereg={}", checkInterval, deregisterAfter);
 			
 			if(grpcPort != -1) {
 				grpcServiceId = "grpc-opentsdb@" + HOSTNAME + "/" + listenerAddress + ":" + grpcPort;
@@ -169,7 +164,7 @@ public class ConsulPlugin extends StartupPlugin {
 				ns.setCheck(check);
 				// TODO: Figure out how to register a grpc health check
 				client.agentServiceRegister(ns);
-				LOG.info("Registered OpenTSDB gRPC Service: checkInterval={}, dereg:={}", checkInterval, deregisterAfter);
+				LOG.info("Registered OpenTSDB gRPC Service: checkInterval={}, dereg={}", checkInterval, deregisterAfter);
 			}
 		} catch (Exception ex) {
 			LOG.error("Failed to register", ex);

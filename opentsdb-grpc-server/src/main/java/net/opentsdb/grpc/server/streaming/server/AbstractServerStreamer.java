@@ -12,22 +12,18 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.grpc.server.streaming.server;
 
-import java.lang.management.ManagementFactory;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.LongAdder;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
-import javax.management.ObjectName;
-
+import org.apache.zookeeper.server.ServerStats;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.grpc.MethodDescriptor;
+import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
-import net.opentsdb.grpc.PutDatapoints;
-import net.opentsdb.grpc.server.util.AccumulatingLongAdder;
 
 /**
  * <p>Title: BidiServerStreamer</p>
@@ -38,17 +34,20 @@ import net.opentsdb.grpc.server.util.AccumulatingLongAdder;
 
 public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> {
 	
-	protected final AtomicBoolean open = new AtomicBoolean(false);
+	protected final AtomicBoolean open;
 	protected long startTime = -1;
 	
-	protected final AtomicLong activeStreams;
-	protected final LongAdder receivedMessages;
-	protected final LongAdder sentMessages;
-	protected final LongAdder processedItems;
-	protected final LongAdder failedItems;
-	protected final StreamObserver<T> responseObserver;
+	protected final Function<T, Integer> subItemsIn;
+	protected final Function<R, Integer> subItemsOut;
+
+	
+	
 	
 	protected final MethodDescriptor<T,R> md;   // e.g. opentsdb.OpenTSDBService/Puts
+	protected final BiFunction<T,StreamerContext,CompletableFuture<R>> streamerFx;
+	protected final ServerCallStreamObserver<R> ro;
+	protected final StreamObserver<R> responseObserver;
+	protected final StreamerContext sc;
 	
 	protected final Logger LOG;
 	
@@ -67,43 +66,63 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 	/**
 	 * Creates a new BidiServerStreamer
 	 */
-	public AbstractServerStreamer(StreamerBuilder<T,R> builder, ServerStats ss, StreamObserver<T> responseObserver) {
+	public AbstractServerStreamer(StreamerBuilder<T,R> builder, StreamerContext streamerContext, StreamObserver<R> responseObserver) {
 		md = builder.methodDescriptor();
+		open = streamerContext.openFlag();
+		subItemsIn = builder.subItemsIn();
+		subItemsOut = builder.subItemsOut();
 		LOG = LoggerFactory.getLogger(md.getFullMethodName() + "." + getClass().getSimpleName());
-		activeStreams = ss.activeStreams;
-		receivedMessages = ss.accReceivedMessages();
-		sentMessages = ss.accSentMessages();
-		processedItems = ss.accProcessedItems();
-		failedItems = ss.accFailedItems();
+		ro = (ServerCallStreamObserver<R>)responseObserver;
+		streamerFx = builder.streamerFx;
 		this.responseObserver = responseObserver;
+		sc = streamerContext; 
 	}
 	
-	public void start() {
+	public AbstractServerStreamer<T,R> start() {
 		startTime = System.currentTimeMillis();
 		open.set(true);
-		activeStreams.incrementAndGet();
+		long active = sc.incrementStreams();
+		LOG.info("Started Streamer: type={}, method={}, active={}", md.getType().name(), md.getFullMethodName(), active);
+		return this;
+		
 	}
 	
 	 
 
 	@Override
 	public void onNext(T value) {
-		receivedMessages.increment();
-		
+		final int itemCount = subItemsIn.apply(value);
+		LOG.info("Received Message: items={}", itemCount);
+		sc.received(itemCount);
+		try {
+			CompletableFuture<R> pendingResponse = streamerFx.apply(value, sc);
+			if(pendingResponse!=null) {
+				pendingResponse.whenComplete((r, t) -> {
+					if(t!=null) {
+						LOG.error("Failed to process message", t);
+						sc.failed(itemCount);						
+					} else {
+						responseObserver.onNext(r);
+						sc.sent(subItemsOut.apply(r));
+					}
+				});
+			}
+		} catch (Exception ex) {
+			LOG.error("Failed to process message", ex);
+		}		
 	}
 
 	@Override
 	public void onError(Throwable t) {
 		if(open.compareAndSet(true, false)) {
-			activeStreams.decrementAndGet();
-		}
-		
+			sc.decrementStreams();
+		}		
 	}
 
 	@Override
 	public void onCompleted() {
 		if(open.compareAndSet(true, false)) {
-			activeStreams.decrementAndGet();
+			sc.decrementStreams();
 		}
 	}
 	

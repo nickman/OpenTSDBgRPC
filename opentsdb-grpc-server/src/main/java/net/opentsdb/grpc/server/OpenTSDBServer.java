@@ -19,7 +19,6 @@ import com.google.protobuf.ByteString;
 
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.core.Aggregators;
-import net.opentsdb.core.DataPoints;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.AggregatorName;
 import net.opentsdb.grpc.AggregatorNames;
@@ -46,6 +45,8 @@ import net.opentsdb.grpc.TSDBAnnotation;
 import net.opentsdb.grpc.Uid;
 import net.opentsdb.grpc.server.handlers.AnnotationHandler;
 import net.opentsdb.grpc.server.handlers.DataPointPutHandler;
+import net.opentsdb.grpc.server.handlers.DataPointStreamHandler;
+import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.stats.StatsCollector;
 
@@ -63,7 +64,7 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	private final File staticDir;
 	private final Path staticPath;
 	private final AggregatorNames aggrNames;
-	private final DataPointPutHandler putHandler;
+	private final DataPointStreamHandler putHandler;
 	private final AnnotationHandler annHandler;
 
 
@@ -78,7 +79,7 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 		staticDir = new File(cfg.config("tsd.http.staticroot", System.getProperty("java.io.tmpdir") + File.separator + "opentsdb" + File.separator + "static"));
 		staticPath = staticDir.toPath();
 		aggrNames = buildAggregatorNames();
-		putHandler = new DataPointPutHandler(tsdb, cfg);
+		putHandler = new DataPointStreamHandler(tsdb, cfg);
 		annHandler = new AnnotationHandler(tsdb, cfg);
 	}
 
@@ -227,7 +228,7 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	 */
 	@Override
 	public void put(PutDatapoints request, StreamObserver<PutDatapointsResponse> responseObserver) {
-		putHandler.put(request, responseObserver);		
+		//putHandler.put(request, responseObserver);		
 	}
 	
 	

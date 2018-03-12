@@ -29,8 +29,8 @@ public class ServerStreamer<T, R> extends AbstractServerStreamer<T, R> {
 	 * @param ss
 	 * @param responseObserver
 	 */
-	public ServerStreamer(StreamerBuilder<T, R> builder, ServerStats ss, StreamObserver<T> responseObserver) {
-		super(builder, ss, responseObserver);
+	public ServerStreamer(StreamerBuilder<T, R> builder, StreamerContext streamerContext, StreamObserver<R> responseObserver) {
+		super(builder, streamerContext, responseObserver);
 	}
 
 }

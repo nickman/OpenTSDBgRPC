@@ -32,10 +32,11 @@ import net.opentsdb.grpc.PutDatapointError;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
 import net.opentsdb.grpc.PutOptions;
-import net.opentsdb.grpc.server.Configuration;
 import net.opentsdb.grpc.server.SuAsyncHelpers;
-import net.opentsdb.grpc.server.util.AccumulatingLongAdder;
-import net.opentsdb.grpc.server.util.RelTime;
+import net.opentsdb.plugin.common.Configuration;
+import net.opentsdb.plugin.common.util.AccumulatingLongAdder;
+import net.opentsdb.plugin.common.util.RelTime;
+import net.opentsdb.stats.StatsCollector;
 
 /**
  * <p>Title: DataPointPutHandler</p>
@@ -89,10 +90,10 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 	
 	
 	@Override
-	protected void doStats(GrpcStatsCollector collector) {
-		collector.recordGrpc("rcvdp", receivedDataPoints.longValue());
-		collector.recordGrpc("okdp", okDataPoints.longValue());
-		collector.recordGrpc("faileddp", failedDataPoints.longValue());
+	protected void doStats(StatsCollector collector) {
+		collector.record("rcvdp", receivedDataPoints.longValue());
+		collector.record("okdp", okDataPoints.longValue());
+		collector.record("faileddp", failedDataPoints.longValue());
 	}
 
 	/**

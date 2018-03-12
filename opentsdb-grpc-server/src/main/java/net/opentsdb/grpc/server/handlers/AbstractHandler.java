@@ -25,7 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.TSDB;
-import net.opentsdb.grpc.server.Configuration;
+import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.stats.StatsCollector;
 
 /**
@@ -69,7 +69,8 @@ public abstract class AbstractHandler {
 	public AbstractHandler(TSDB tsdb, Configuration cfg) {	
 		this.tsdb = tsdb;
 		this.cfg = cfg;
-		objectName = register();
+		objectName = null; 
+//				register();
 	}
 	
 	public int getActiveStreams() {
@@ -86,16 +87,13 @@ public abstract class AbstractHandler {
 	 * @param collector The stats collector
 	 */
 	public void collectStats(StatsCollector collector) {
-		GrpcStatsCollector gcollector = new GrpcStatsCollector("grpc", collector);
-		try {
-			gcollector.addExtraTag("grpchandler", name);
-			doStats(gcollector);			
-		} finally {
-			gcollector.clearExtraTag("grpchandler");
-		}
-		gcollector.recordGrpc("activestreams", activeStreams.get());
-		gcollector.recordGrpc("totalstreams", totalStreams.longValue());
 		
+		try {
+			collector.addExtraTag("grpchandler", name);
+			doStats(collector);			
+		} finally {
+			collector.clearExtraTag("grpchandler");
+		}
 	}
 	
 	public long getLastComm() {
@@ -110,7 +108,7 @@ public abstract class AbstractHandler {
 	 * Collects handler stats
 	 * @param collector A grpc specific stats collector
 	 */
-	protected abstract void doStats(GrpcStatsCollector collector);
+	protected abstract void doStats(StatsCollector collector);
 	
 
 	/**

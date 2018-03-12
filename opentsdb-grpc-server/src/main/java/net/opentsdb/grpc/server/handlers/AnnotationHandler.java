@@ -27,11 +27,12 @@ import net.opentsdb.grpc.CreateAnnotationError;
 import net.opentsdb.grpc.CreateAnnotationResponse;
 import net.opentsdb.grpc.TSDBAnnotation;
 import net.opentsdb.grpc.TsuidBorS;
-import net.opentsdb.grpc.server.Configuration;
 import net.opentsdb.grpc.server.ProtoConverters;
 import net.opentsdb.grpc.server.SuAsyncHelpers;
-import net.opentsdb.grpc.server.util.AccumulatingLongAdder;
 import net.opentsdb.meta.Annotation;
+import net.opentsdb.plugin.common.Configuration;
+import net.opentsdb.plugin.common.util.AccumulatingLongAdder;
+import net.opentsdb.stats.StatsCollector;
 
 /**
  * <p>Title: AnnotationHandler</p>
@@ -92,8 +93,8 @@ public class AnnotationHandler extends AbstractHandler implements  AnnotationHan
 	 * @see net.opentsdb.grpc.server.handlers.AbstractHandler#doStats(net.opentsdb.grpc.server.handlers.GrpcStatsCollector)
 	 */
 	@Override
-	protected void doStats(GrpcStatsCollector collector) {
-		collector.recordGrpc("getrequests", getRequests.longValue());
+	protected void doStats(StatsCollector collector) {
+		collector.record("getrequests", getRequests.longValue());
 		
 	}
 	

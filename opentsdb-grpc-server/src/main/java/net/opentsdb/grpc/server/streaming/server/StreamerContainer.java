@@ -13,6 +13,8 @@
 package net.opentsdb.grpc.server.streaming.server;
 
 import java.lang.management.ManagementFactory;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.stub.StreamObserver;
+import net.opentsdb.stats.StatsCollector;
 
 /**
  * <p>Title: StreamerContainer</p>
@@ -40,9 +43,14 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 	protected final MethodDescriptor<T,R> md;   // e.g. opentsdb.OpenTSDBService/Puts
 	protected final StreamerBuilder<T,R> builder;
 	
-	protected final ServerStats ss = new ServerStats();
+	protected final RollupServerStats ss = new RollupServerStats();
 	
 	protected final MethodType methodType;
+	protected final BiFunction<T,StreamerContext,CompletableFuture<R>> streamerFx;
+	
+	protected String grpcPackage = null;
+	protected String grpcClass = null;
+	protected String grpcMethod = null;
 	
 	
 	/**
@@ -50,26 +58,42 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 	 */
 	public StreamerContainer(StreamerBuilder<T,R> builder) {
 		this.builder = builder;
+		this.streamerFx = builder.streamerFx;
 		md = builder.methodDescriptor();
 		methodType = md.getType();
 		LOG = LoggerFactory.getLogger(md.getFullMethodName() + "." + getClass().getSimpleName());
 		objectName = objectName();
+		register();
+		LOG.info("Registered {} StreamerContainer for {}", methodType.name(), md.getFullMethodName());
 	}
 	
-	public BidiServerStreamer<T,R> newBidiStreamer(StreamObserver<T> responseObserver) {
+	public BidiServerStreamer<T,R> newBidiStreamer(StreamObserver<R> responseObserver) {
 		if(methodType != MethodType.BIDI_STREAMING) {
 			throw new IllegalArgumentException("The method [" + md.getFullMethodName() + "] is not of type BIDI_STREAMING");
 		}
-		return new BidiServerStreamer<T,R>(builder, ss, responseObserver);
+		LOG.info("Creating new BidiServerStreamer for {}", md.getFullMethodName());
+		return new BidiServerStreamer<T,R>(builder, new StreamerContext(ss), responseObserver);
 	}
 	
-	public ServerStreamer<T,R> newServerStreamer(StreamObserver<T> responseObserver) {
+	public ServerStreamer<T,R> newServerStreamer(StreamObserver<R> responseObserver) {
 		if(methodType != MethodType.SERVER_STREAMING) {
 			throw new IllegalArgumentException("The method [" + md.getFullMethodName() + "] is not of type SERVER_STREAMING");
 		}
-		return new ServerStreamer<T,R>(builder, ss, responseObserver);
+		return new ServerStreamer<T,R>(builder, new StreamerContext(ss), responseObserver);
 	}
 	
+	public void doStats(StatsCollector collector) {
+		try {
+			collector.addExtraTag("grpcpkg", grpcPackage);
+			collector.addExtraTag("grpcclass", grpcClass);
+			collector.addExtraTag("grpcmethod", grpcMethod);			
+			ss.doStats(collector);
+		} finally {
+			try { collector.clearExtraTag("grpcpkg"); } catch (Exception x) {}
+			try { collector.clearExtraTag("grpcclass"); } catch (Exception x) {}
+			try { collector.clearExtraTag("grpcmethod"); } catch (Exception x) {}
+		}
+	}
 	
 	protected ObjectName objectName() {
 		Matcher m = METHOD_NAME_PARSER.matcher(md.getFullMethodName());
@@ -78,10 +102,14 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 			return null;
 		}
 		try {
+			grpcPackage = m.group(1);
+			grpcClass = m.group(2);
+			grpcMethod = m.group(3);
+
 			return new ObjectName(String.format(OBJECT_NAME_FMT, 
-				m.group(1),
-				m.group(2),
-				m.group(3)
+					grpcPackage,
+					grpcClass,
+					grpcMethod
 			));
 		} catch (Exception ex) {
 			LOG.warn("Failed to build ObjectName for MethodDescriptor name: {}", md.getFullMethodName(), ex);

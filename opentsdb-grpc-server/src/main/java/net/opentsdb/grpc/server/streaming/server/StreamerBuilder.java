@@ -13,14 +13,12 @@
 package net.opentsdb.grpc.server.streaming.server;
 
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.LongAdder;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import io.grpc.MethodDescriptor;
-import io.grpc.stub.StreamObserver;
-import net.opentsdb.grpc.PutDatapointsResponse;
-import net.opentsdb.grpc.server.util.AccumulatingLongAdder;
+
 
 /**
  * <p>Title: StreamerBuilder</p>
@@ -35,16 +33,17 @@ public class StreamerBuilder<T,R> {
 	protected Function<R, Integer> subItemsOut = (r) -> 1;
 	
 	protected final MethodDescriptor<T,R> md;
+	protected final BiFunction<T,StreamerContext,CompletableFuture<R>> streamerFx;
 	
 
 	/**
 	 * Creates a new StreamerBuilder
 	 */
-	public StreamerBuilder(MethodDescriptor<T,R> md) {
+	public StreamerBuilder(MethodDescriptor<T,R> md, BiFunction<T,StreamerContext,CompletableFuture<R>> streamerFx) {
 		this.md = md;
+		this.streamerFx = streamerFx;
 	}
 	
-	// protected final StreamObserver<T> responseObserver;
 	
 	public MethodDescriptor<T,R> methodDescriptor() {
 		return md;

@@ -1,1 +1,1 @@
-net.opentsdb.consul.BootStartupPlugin
+net.opentsdb.consul.IsolatedConsulPlugin

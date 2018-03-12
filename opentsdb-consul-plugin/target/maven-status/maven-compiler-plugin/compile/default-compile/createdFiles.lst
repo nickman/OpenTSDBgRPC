@@ -1,7 +1,0 @@
-net/opentsdb/consul/ConsulPlugin.class
-net/opentsdb/consul/ConsulPlugin$1.class
-net/opentsdb/consul/BootStartupPlugin.class
-net/opentsdb/consul/IsolatedClassLoader.class
-net/opentsdb/consul/IsolatedClassLoader$ChildURLClassLoader.class
-net/opentsdb/consul/utils/NetUtils.class
-net/opentsdb/consul/IsolatedClassLoader$FindClassClassLoader.class
