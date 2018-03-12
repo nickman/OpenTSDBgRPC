@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.stub.StreamObserver;
+import net.opentsdb.grpc.server.handlers.Handler;
 import net.opentsdb.stats.StatsCollector;
 
 /**
@@ -46,7 +47,7 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 	protected final RollupServerStats ss = new RollupServerStats();
 	
 	protected final MethodType methodType;
-	protected final BiFunction<T,StreamerContext,CompletableFuture<R>> streamerFx;
+	protected final Handler<T,R> handler;
 	
 	protected String grpcPackage = null;
 	protected String grpcClass = null;
@@ -58,12 +59,13 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 	 */
 	public StreamerContainer(StreamerBuilder<T,R> builder) {
 		this.builder = builder;
-		this.streamerFx = builder.streamerFx;
+		this.handler = builder.handler;
 		md = builder.methodDescriptor();
 		methodType = md.getType();
 		LOG = LoggerFactory.getLogger(md.getFullMethodName() + "." + getClass().getSimpleName());
 		objectName = objectName();
 		register();
+		
 		LOG.info("Registered {} StreamerContainer for {}", methodType.name(), md.getFullMethodName());
 	}
 	
@@ -71,7 +73,7 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 		if(methodType != MethodType.BIDI_STREAMING) {
 			throw new IllegalArgumentException("The method [" + md.getFullMethodName() + "] is not of type BIDI_STREAMING");
 		}
-		LOG.info("Creating new BidiServerStreamer for {}", md.getFullMethodName());
+		LOG.info("Creating new BidiServerStreamer for {} / ro:{}", md.getFullMethodName(), responseObserver.getClass().getName());
 		return new BidiServerStreamer<T,R>(builder, new StreamerContext(ss), responseObserver);
 	}
 	
@@ -154,6 +156,11 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 
 	public long getFailedItems() {
 		return ss.failedItems.longValue();
+	}
+	
+	@Override
+	public long getCancellations() {		
+		return ss.cancellations.longValue();
 	}
 
 }

@@ -16,7 +16,9 @@ import java.lang.management.ManagementFactory;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -64,6 +66,9 @@ public class ConsulPlugin extends StartupPlugin {
 	protected String httpServiceId = null;
 	protected String grpcServiceId = null;
 	
+	protected String[] tsdAliases = new String[0];
+	protected String[] grpcAliases = new String[0];
+	
 	protected Configuration cfg = null;
 	
 	protected final CloseableHttpClient httpclient = HttpClients.createDefault();
@@ -88,6 +93,8 @@ public class ConsulPlugin extends StartupPlugin {
 		if(listenerAddress==null || NetUtils.isWildcard(listenerAddress)) {
 			listenerAddress = NetUtils.getListenAddressOrLoopback();			
 		}
+		tsdAliases = cfg.config("tsd.consul.aliases", tsdAliases);
+		grpcAliases = cfg.config("grpc.consul.aliases", grpcAliases);
 		
 		String modes = cfg.config("tsd.mode", "rw");
 		read = modes.contains("r");
@@ -147,7 +154,12 @@ public class ConsulPlugin extends StartupPlugin {
 			
 			ns.setCheck(check);
 			client.agentServiceRegister(ns);
-			LOG.info("Registered OpenTSDB HTTP Service: checkInterval={}, dereg={}", checkInterval, deregisterAfter);
+			for(String alias : tsdAliases) {
+				if(!"OpenTSDB".equals(alias)) {					
+					client.agentServiceRegister(alias(ns, alias, httpServiceId + "[" + alias + "]"));
+				}
+			}
+			LOG.info("Registered OpenTSDB HTTP Service: checkInterval={}, dereg={}, aliases={}", checkInterval, deregisterAfter, Arrays.toString(tsdAliases));
 			
 			if(grpcPort != -1) {
 				grpcServiceId = "grpc-opentsdb@" + HOSTNAME + "/" + listenerAddress + ":" + grpcPort;
@@ -164,12 +176,30 @@ public class ConsulPlugin extends StartupPlugin {
 				ns.setCheck(check);
 				// TODO: Figure out how to register a grpc health check
 				client.agentServiceRegister(ns);
-				LOG.info("Registered OpenTSDB gRPC Service: checkInterval={}, dereg={}", checkInterval, deregisterAfter);
+				for(String alias : grpcAliases) {
+					if(!"OpenTSDBGRPC".equals(alias)) {
+						client.agentServiceRegister(alias(ns, alias, grpcServiceId + "[" + alias + "]"));
+					}
+				}
+				
+				LOG.info("Registered OpenTSDB gRPC Service: checkInterval={}, dereg={}, aliases={}", checkInterval, deregisterAfter, Arrays.toString(grpcAliases));
 			}
 		} catch (Exception ex) {
 			LOG.error("Failed to register", ex);
 			throw new IllegalArgumentException("Failed to register", ex);
 		}
+	}
+	
+	protected NewService alias(NewService svc, String name, String id) {
+		NewService ns = new NewService();
+		ns.setName(name);
+		ns.setId(id);
+		ns.setAddress(svc.getAddress());
+		ns.setPort(svc.getPort());		
+		ns.setTags(svc.getTags());
+		ns.setEnableTagOverride(false);
+		ns.setCheck(svc.getCheck());		
+		return ns;
 	}
 	
 	protected AgentConsulClient consul() throws Exception {

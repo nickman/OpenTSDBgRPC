@@ -32,6 +32,7 @@ public class RollupServerStats {
 	public final LongAdder sentMessages = new LongAdder();
 	public final LongAdder processedItems = new LongAdder();
 	public final LongAdder failedItems = new LongAdder();
+	public final LongAdder cancellations = new LongAdder();
 	
 	protected void doStats(StatsCollector collector) {
 		collector.record("activestreams", activeStreams.get());
@@ -39,6 +40,7 @@ public class RollupServerStats {
 		collector.record("sentmsgs", sentMessages.longValue());
 		collector.record("processed", processedItems.longValue());
 		collector.record("failed", failedItems.longValue());
+		collector.record("cancellations", cancellations.longValue());
 	}
 
 	public LongAdder accReceivedMessages() {
@@ -57,8 +59,17 @@ public class RollupServerStats {
 		return new AccumulatingLongAdder(failedItems);
 	}
 	
+	public LongAdder accCancellations() {
+		return new AccumulatingLongAdder(cancellations);
+	}
+	
+	
 	public ServerStreamStats serverStats() {
 		return new ServerStreamStats();
+	}
+	
+	public void recordCancellation() {
+		cancellations.increment();
 	}
 	
 	
@@ -70,6 +81,7 @@ public class RollupServerStats {
 		public final LongAdder sentMessages = accSentMessages();
 		public final LongAdder processedItems = accProcessedItems();
 		public final LongAdder failedItems = accFailedItems();	
+		public final LongAdder cancellations = accCancellations();
 		
 		public long incrementStreams() {
 			return activeStreams.incrementAndGet();

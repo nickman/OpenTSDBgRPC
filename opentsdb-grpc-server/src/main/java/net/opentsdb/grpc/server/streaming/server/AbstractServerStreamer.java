@@ -13,6 +13,7 @@
 package net.opentsdb.grpc.server.streaming.server;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -24,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import io.grpc.MethodDescriptor;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
+import net.opentsdb.grpc.server.handlers.Handler;
 
 /**
  * <p>Title: BidiServerStreamer</p>
@@ -44,10 +46,11 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 	
 	
 	protected final MethodDescriptor<T,R> md;   // e.g. opentsdb.OpenTSDBService/Puts
-	protected final BiFunction<T,StreamerContext,CompletableFuture<R>> streamerFx;
+	protected final Handler<T,R> handler;
 	protected final ServerCallStreamObserver<R> ro;
 	protected final StreamObserver<R> responseObserver;
 	protected final StreamerContext sc;
+	
 	
 	protected final Logger LOG;
 	
@@ -73,9 +76,18 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 		subItemsOut = builder.subItemsOut();
 		LOG = LoggerFactory.getLogger(md.getFullMethodName() + "." + getClass().getSimpleName());
 		ro = (ServerCallStreamObserver<R>)responseObserver;
-		streamerFx = builder.streamerFx;
+		this.handler = builder.handler;
 		this.responseObserver = responseObserver;
 		sc = streamerContext; 
+		
+		ro.setOnCancelHandler(new Runnable() {
+			@Override
+			public void run() {
+				sc.cancellation();
+				System.err.println("\n\n========= CANCELLED: =============\n\t");
+				
+			}
+		});
 	}
 	
 	public AbstractServerStreamer<T,R> start() {
@@ -95,7 +107,7 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 		LOG.info("Received Message: items={}", itemCount);
 		sc.received(itemCount);
 		try {
-			CompletableFuture<R> pendingResponse = streamerFx.apply(value, sc);
+			CompletableFuture<R> pendingResponse = handler.invoke(value, sc);
 			if(pendingResponse!=null) {
 				pendingResponse.whenComplete((r, t) -> {
 					if(t!=null) {
@@ -121,6 +133,13 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 
 	@Override
 	public void onCompleted() {
+		LOG.info("COMPLETE");
+		R r = handler.closer(sc);
+		if(r!=null) {
+			ro.onNext(r);
+			LOG.info("FINAL SENT");
+		}
+		ro.onCompleted();			
 		if(open.compareAndSet(true, false)) {
 			sc.decrementStreams();
 		}

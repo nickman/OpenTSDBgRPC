@@ -13,6 +13,11 @@
 package net.opentsdb.plugin.common;
 
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.regex.Pattern;
+
 import io.netty.channel.epoll.Epoll;
 import net.opentsdb.plugin.common.util.RelTime;
 import net.opentsdb.plugin.common.util.TUnit;
@@ -123,12 +128,12 @@ public class Configuration {
 	}
 	
 	/**
-	 * Acquires a configuration value via {@link #config(Config, String, String)}
-	 * @param cfg The OpenTSDB configuration repo
+	 * Acquires a configuration value via {@link #config(String, String)}
 	 * @param key The configuration key
 	 * @param defaultValue The default value
 	 * @return The configured value or the default if not defined
 	 */
+
 	public int config(String key, int defaultValue) {
 		String v = config(key, (String)null);
 		int i = Integer.MIN_VALUE;
@@ -146,8 +151,7 @@ public class Configuration {
 	}
 	
 	/**
-	 * Acquires a configuration value via {@link #config(Config, String, String)}
-	 * @param cfg The OpenTSDB configuration repo
+	 * Acquires a configuration value via {@link #config(String, String)}
 	 * @param key The configuration key
 	 * @param defaultValue The default value
 	 * @return The configured value or the default if not defined
@@ -170,8 +174,7 @@ public class Configuration {
 	
 	
 	/**
-	 * Acquires a configuration value via {@link #config(Config, String, String)}
-	 * @param cfg The OpenTSDB configuration repo
+	 * Acquires a configuration value via {@link #config(String, String)}
 	 * @param key The configuration key
 	 * @param defaultValue The default value
 	 * @return The configured value or the default if not defined
@@ -191,6 +194,37 @@ public class Configuration {
 		config.overrideConfig(key, "" + b);
 		return b;
 	}
+	
+	private static final Pattern COMMA_SPLITTER = Pattern.compile(",");
+	
+	/**
+	 * Acquires a configuration value via {@link #config(String, String)}
+	 * @param key The configuration key
+	 * @param defaultValue The default value
+	 * @return The configured value or the default if not defined
+	 */
+	public String[] config(String key, String...defaultValue) {
+		String v = config(key, (String)null);
+		List<String> arr = new ArrayList<>();
+		if(v==null || v.trim().isEmpty()) {
+			Collections.addAll(arr, defaultValue);
+		} else {
+			try {
+				String[] as = COMMA_SPLITTER.split(v);
+				for(String a : as) {
+					if(a==null || a.trim().isEmpty()) continue;
+					arr.add(a.trim());
+				}
+			} catch (Exception x) {
+				arr.clear();
+				Collections.addAll(arr, defaultValue);
+			}
+		}
+		String[] result = arr.toArray(new String[0]);
+		config.overrideConfig(key, String.join(",", result));
+		return result;
+	}
+	
 	
 	
 	/**

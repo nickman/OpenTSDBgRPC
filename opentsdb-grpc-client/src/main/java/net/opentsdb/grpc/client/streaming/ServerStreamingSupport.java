@@ -33,75 +33,122 @@ public abstract class ServerStreamingSupport<T, R> extends AbstractStreamer<T, R
 		super(builder);
 	}
 	
+	protected abstract class BaseStreamObserver implements ClientResponseObserver<T,R> {
+		
+		@Override
+		public void onNext(R r) {
+			try {
+				outConsumer.accept(r);
+			} catch (Exception ex) {
+				acceptErrors.increment();
+			}
+			handleNext(r);
+		}
+		
+		protected abstract void handleNext(R r);
+		
+		@Override
+		public void onError(Throwable t) {
+			LOG.error("Response Observer: Stream error", t);
+			completion.countDown();			
+		}
 
+		@Override
+		public void onCompleted() {
+			LOG.info("Response Observer:Stream Complete\n{}", printStats());				
+			completion.countDown();
+		}
+
+
+		@Override
+		public void beforeStart(ClientCallStreamObserver<T> rs) {
+			requestStream = rs;
+//			rs.disableAutoInboundFlowControl();
+			rs.setOnReadyHandler(() -> {
+				onReadyEvents.increment();
+				if(inQueue != null) {
+					LOG.info("Request Stream Ready. Queued: {}", inQueue.size());
+					long writes = 0;
+					while(rs.isReady()) {
+						T t = inQueue.poll();
+						if(t!=null) {
+							int inCount = subItemsIn.apply(t);
+							rs.onNext(t);
+							rs.request(1);
+							requestsSent.add(inCount);
+							inFlight.addAndGet(inCount);
+							writes++;
+						} else {
+							break;
+						}
+					}
+					LOG.info("Request Queue Flushed. Queued: {}, Flushed: {}", inQueue.size(), writes);
+					if(clientClosed.get() && inQueue.isEmpty()) {
+						checkComplete();
+					}						
+				}
+			});
+		}
+		
+	}
+	
+	
+	protected class FinalProvidingStreamObserver extends BaseStreamObserver {
+
+		@Override
+		protected void handleNext(R r) {
+			if(isFinalFx.apply(r)) {
+				LOG.info("FINAL Response");
+//				requestObserver.onCompleted();
+//				requestStream.onCompleted();
+				onCompleted();
+				responseObserver.onCompleted();
+				completion.countDown();
+				
+			} else {
+				int outCount = subItemsOut.apply(r);
+				responsesReceived.add(outCount);
+				if(inFlight.addAndGet(-outCount)==0) {
+					if(clientClosed.get()) {
+						clientCall.halfClose();
+//						requestStream.onCompleted();
+						System.err.println("HalfClosed Client !!!");
+					}
+				}
+			}
+			
+		}
+		
+	}
+	
+	protected class NonFinalProvidingStreamObserver extends BaseStreamObserver {
+		@Override
+		protected void handleNext(R r) {
+			int outCount = subItemsOut.apply(r);
+			responsesReceived.add(outCount);
+			long inf = inFlight.addAndGet(-outCount);
+			if(inf==0 && clientClosed.get()) {
+				LOG.info("Client Close Complete");
+				requestObserver.onCompleted();
+				completion.countDown();				
+			}
+			// TODO: DO we need to check the out queue ?			
+		}
+		
+	}
+	
 	
 	protected StreamObserver<R> responseObserver() {
-		return new ClientResponseObserver<T, R>() {
-
-			@Override
-			public void onNext(R message) {
-				int outCount = subItemsOut.apply(message);
-				responsesReceived.add(outCount);
-				long inf = inFlight.addAndGet(outCount * -1);
-				if(inf==0 && clientClosed.get()) {
-					LOG.info("Client Close Complete");
-					completion.countDown();
-				}
-				try {
-					outConsumer.accept(message);
-				} catch (Exception ex) {
-					acceptErrors.increment();
-				}
-				
-				if(clientClosed.get() && (inQueue==null || inQueue.isEmpty())) {
-					checkComplete();
-				}
-//					LOG.info("REC: {}, final: {}", responsesReceived.longValue(), isFinal);
-			}
-
-			@Override
-			public void onError(Throwable t) {
-				LOG.error("Response Observer: Stream error", t);
-				completion.countDown();
-			}
-
-			@Override
-			public void onCompleted() {
-				LOG.info("Response Observer:Stream Complete\n{}", printStats());				
-				completion.countDown();
-			}
-
-			@Override
-			public void beforeStart(ClientCallStreamObserver<T> rs) {
-				requestStream = rs;
-//				rs.disableAutoInboundFlowControl();
-				rs.setOnReadyHandler(() -> {
-					onReadyEvents.increment();
-					if(inQueue != null) {
-						LOG.info("Request Stream Ready. Queued: {}", inQueue.size());
-						long writes = 0;
-						while(rs.isReady()) {
-							T t = inQueue.poll();
-							if(t!=null) {
-								int inCount = subItemsIn.apply(t);
-								rs.onNext(t);
-								rs.request(1);
-								requestsSent.add(inCount);
-								inFlight.addAndGet(inCount);
-								writes++;
-							} else {
-								break;
-							}
-						}
-						LOG.info("Request Queue Flushed. Queued: {}, Flushed: {}", inQueue.size(), writes);
-						if(clientClosed.get() && inQueue.isEmpty()) {
-							checkComplete();
-						}
-						LOG.info("");
-					}
-				});
-			}
-		};
+		/*
+		 * If expectsFinalResponse is true, then we don't count down 
+		 * until we receive the final response (or there's an error).
+		 * Otherwise, count down when there are zero in-flight and the
+		 * client is closed.
+		 */
+		if(expectsFinalResponse) {
+			return new FinalProvidingStreamObserver();
+		}
+		return new NonFinalProvidingStreamObserver();
 	}
 	
 

@@ -32,4 +32,6 @@ public interface StreamerContainerMXBean {
 	public long getProcessedItems();
 
 	public long getFailedItems();
+	
+	public long getCancellations();
 }

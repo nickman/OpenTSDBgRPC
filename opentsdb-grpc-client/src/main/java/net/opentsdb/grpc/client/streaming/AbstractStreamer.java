@@ -97,6 +97,8 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R> {
 	protected long startTime = -1;
 
 	protected final RPCTypes<T,R> rpcTypes;
+	protected final boolean expectsFinalResponse;
+	protected final AtomicBoolean finalResponseReceived = new AtomicBoolean(false);
 	
 	protected final CallOptions callOptions;
 	
@@ -180,11 +182,16 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R> {
 		}
 	}
 	
+	@SuppressWarnings("unchecked")
+	public RPCTypes<T,R> typesFor(MethodDescriptor<T,R> md) {
+		RPCTypes<T,R> types = (RPCTypes<T, R>) TYPE_CACHE.getIfPresent(md);
+		return types==null ? RPCTypes.DEFAULT_TYPE : types;
+	}
+	
 	/**
 	 * Creates a new AbstractStreamer
 	 * @param builder The streamer builder
 	 */
-	@SuppressWarnings("unchecked")
 	protected AbstractStreamer(StreamerBuilder<T,R> builder) {
 		md = builder.methodDescriptor();
 		if(!METHOD_TYPES.contains(Objects.requireNonNull(md, "The passed MethodDescriptor was null").getType())) {
@@ -196,6 +203,7 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R> {
 		
 		this.outConsumer = Objects.requireNonNull(builder.outConsumer(), "The passed Consumer was null");
 		rpcTypes = types();
+		expectsFinalResponse = rpcTypes.providesFinal;
 		
 		// If CLIENT_STREAMING, then first response is the final response
 		isFinalFx = methodType == MethodType.CLIENT_STREAMING ? (r) -> true :  builder.finalResponse();

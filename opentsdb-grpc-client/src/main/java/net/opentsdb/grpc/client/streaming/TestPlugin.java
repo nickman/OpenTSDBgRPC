@@ -72,19 +72,24 @@ public class TestPlugin {
 //		tp.addDataPoints();
 //		tp.streamDataPoints2();
 		main = Thread.currentThread();
-		IntStream.range(0, 1).parallel().forEach(idx -> {
-			
-			for(int i = 0; i < 1; i++) {
-				TestPlugin tp = new TestPlugin();
-				tp.streamer();
-				try { Thread.sleep(1000); } catch (Exception x) {}
+		new Thread() {
+			public void run() {
+				IntStream.range(0, 3).parallel().forEach(idx -> {					
+					for(int i = 0; i < 1; i++) {
+						TestPlugin tp = new TestPlugin();
+						tp.streamer();
+						try { Thread.sleep(1000); } catch (Exception x) {}
+					}
+				});
 			}
-		});
+		}.start();
 		
 		try {
+			LOG.info("MAIN waiting for interrupt");
 			try { Thread.currentThread().join(); } catch (Exception x) {}
 			LOG.info("Shutting Down...");
 			running.set(false);
+			System.exit(0);
 		} catch (Exception ex) {
 			LOG.error("Main Error", ex);
 		}
@@ -101,6 +106,8 @@ public class TestPlugin {
 			BidiStreamer<PutDatapoints,PutDatapointsResponse> stream = StreamerBuilder.newBuilder(channel, OpenTSDBServiceGrpc.getPutsMethod(), r -> {
 				if(r.getFinalResponse()) {
 					LOG.info("Final: {}", r);
+				} else {
+					LOG.info("Intermediate: {}", r);
 				}
 			})
 			.callOptions(CallOptions.DEFAULT.withCompression("gzip").withWaitForReady())
@@ -114,7 +121,7 @@ public class TestPlugin {
 			MetricTags mtags = MetricTags.newBuilder().putAllTags(tags).build();
 			stream.start();		
 			int total = 0;
-			for(int x = 0; x < 1; x++) {
+			for(int x = 0; x < 100; x++) {
 				PutDatapoints.Builder pdb = PutDatapoints.newBuilder();
 				for(int i = 0; i < 100; i++) {
 					DataPoint dp = DataPoint.newBuilder()
@@ -127,6 +134,7 @@ public class TestPlugin {
 					total++;
 				}
 				stream.send(pdb.build());
+				try { Thread.sleep(1000); } catch (Exception xx) {}
 			}
 			stream.clientComplete();
 			LOG.info("Sent {} Datapoints", total);
@@ -136,9 +144,10 @@ public class TestPlugin {
 				System.err.println("Streamer NOT Closed Successfully. Stats:" + stream.printStats());
 			}
 		} finally {
-			try { mc.shutdown(); } catch (Exception x) {}
+			try { mc.shutdownNow(); } catch (Exception x) {}
 		}
-		//main.interrupt();
+		LOG.info("------>Interrupting main");
+		main.interrupt();
 
 	}
 	

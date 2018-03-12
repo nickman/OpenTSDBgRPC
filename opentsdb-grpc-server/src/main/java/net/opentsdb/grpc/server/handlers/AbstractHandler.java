@@ -14,6 +14,7 @@ package net.opentsdb.grpc.server.handlers;
 
 import java.lang.management.ManagementFactory;
 import java.util.Date;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
@@ -25,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.grpc.server.streaming.server.StreamerContext;
 import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.stats.StatsCollector;
 
@@ -35,7 +37,7 @@ import net.opentsdb.stats.StatsCollector;
  * <p><code>net.opentsdb.grpc.server.handlers.AbstractHandler</code></p>
  */
 
-public abstract class AbstractHandler {
+public abstract class AbstractHandler<T,R> implements Handler<T, R> {
 	/** The JMX ObjectName prefix */
 	protected static final String OBJECT_NAME_PREFIX = "net.opentsdb.grpc:type=GRPCHandler,name=";
 	/** The platform MBeanServer */
@@ -81,7 +83,15 @@ public abstract class AbstractHandler {
 		return totalStreams.longValue();
 	}
 	
+	@Override
+	public CompletableFuture<R> invoke(T t, StreamerContext sc) {		
+		return null;
+	}
 	
+	@Override
+	public R closer(StreamerContext sc) {
+		return null;
+	}
 	/**
 	 * Collects stats for this handler
 	 * @param collector The stats collector

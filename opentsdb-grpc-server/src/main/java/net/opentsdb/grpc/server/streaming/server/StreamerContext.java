@@ -32,6 +32,7 @@ public class StreamerContext {
 	private final LongAdder sentMessages;
 	private final LongAdder processedItems;
 	private final LongAdder failedItems;
+	private final LongAdder cancellations;
 	private final AtomicBoolean open = new AtomicBoolean();
 	
 
@@ -43,6 +44,7 @@ public class StreamerContext {
 			.append("\n\tSent:").append(sentMessages.longValue())
 			.append("\n\tProcessed:").append(processedItems.longValue())
 			.append("\n\tFailed:").append(failedItems.longValue())
+			.append("\n\tCancellations:").append(cancellations.longValue())
 			.append("\n]")
 			.toString();
 	}
@@ -55,7 +57,8 @@ public class StreamerContext {
 		receivedMessages = rss.accReceivedMessages();
 		sentMessages = rss.accSentMessages();
 		processedItems = rss.accProcessedItems();
-		failedItems = rss.accFailedItems();		
+		failedItems = rss.accFailedItems();	
+		cancellations = rss.accCancellations();
 	}
 	
 	public LongAdder accProcessedItems() {
@@ -132,6 +135,11 @@ public class StreamerContext {
 	
 	public void failed() {
 		failedItems.increment();
+	}
+	
+
+	public void cancellation() {
+		cancellations.increment();
 	}
 	
 

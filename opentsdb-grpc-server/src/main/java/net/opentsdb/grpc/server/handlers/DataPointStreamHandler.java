@@ -40,7 +40,7 @@ import net.opentsdb.stats.StatsCollector;
  * <p><code>net.opentsdb.grpc.server.handlers.DataPointStreamHandler</code></p>
  */
 
-public class DataPointStreamHandler extends AbstractHandler {
+public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDatapointsResponse> {
 	/** An empty put response constant */
 	protected static final PutDatapointsResponse EMPTY_PUT_RESPONSE = PutDatapointsResponse.newBuilder()
 			.setSuccess(-1)
@@ -49,7 +49,7 @@ public class DataPointStreamHandler extends AbstractHandler {
 	
 	
 	protected final StreamerContainer<PutDatapoints, PutDatapointsResponse> putDataPointsStreamContainer = 
-			new StreamerContainer<>(new StreamerBuilder<>(OpenTSDBServiceGrpc.getPutsMethod(), this::putDatapoints));
+			new StreamerContainer<>(new StreamerBuilder<>(OpenTSDBServiceGrpc.getPutsMethod(), this));
 
 	/**
 	 * Creates a new DataPointStreamHandler
@@ -74,7 +74,9 @@ public class DataPointStreamHandler extends AbstractHandler {
 		putDataPointsStreamContainer.doStats(collector);
 	}
 	
-	protected CompletableFuture<PutDatapointsResponse> putDatapoints(PutDatapoints putDatapoints, StreamerContext sc) {
+
+	@Override
+	public CompletableFuture<PutDatapointsResponse> invoke(PutDatapoints putDatapoints, StreamerContext sc) {
 		CompletableFuture<PutDatapointsResponse> cf = new CompletableFuture<PutDatapointsResponse>();
 		final LongAdder _okDataPoints = sc.accProcessedItems();
 		final LongAdder _failedDataPoints = sc.accFailedItems();
@@ -121,13 +123,18 @@ public class DataPointStreamHandler extends AbstractHandler {
 					LOG.error("Batch Write Failed", t);							
 				}
 				cf.complete(response(_okDataPoints.longValue(), _failedDataPoints.longValue(), false));
-			});
-			
+			});		
 		} catch (Exception ex) {			
 			LOG.error("DP Failure", ex);
 			cf.completeExceptionally(ex);
-		}		
+		}
 		return cf;
+		
+	}
+
+	@Override
+	public PutDatapointsResponse closer(StreamerContext sc) {
+		return response(sc.getProcessedItems(), sc.getFailedItems(), true);
 	}
 	
 	/**
@@ -163,6 +170,5 @@ public class DataPointStreamHandler extends AbstractHandler {
 				)
 				.build();
 	}
-	
 
 }

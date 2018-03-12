@@ -45,7 +45,7 @@ import net.opentsdb.stats.StatsCollector;
  * <p><code>net.opentsdb.grpc.server.handlers.DataPointPutHandler</code></p>
  */
 
-public class DataPointPutHandler extends AbstractHandler implements DataPointPutHandlerMBean {
+public class DataPointPutHandler extends AbstractHandler<PutDatapoints, PutDatapointsResponse> implements DataPointPutHandlerMBean {
 	/** An empty put response constant */
 	protected static final PutDatapointsResponse EMPTY_PUT_RESPONSE = PutDatapointsResponse.newBuilder()
 			.setSuccess(-1)
@@ -112,6 +112,8 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 		final AtomicBoolean open = new AtomicBoolean(true);
 		activeStreams.incrementAndGet();
 		totalStreams.increment();
+		
+		
 		
 		return new StreamObserver<PutDatapoints>() {			
 			final long startTime = System.currentTimeMillis();
@@ -201,6 +203,7 @@ public class DataPointPutHandler extends AbstractHandler implements DataPointPut
 
 			@Override
 			public void onCompleted() {
+				LOG.info("ON COMPLETED");
 				try {
 					if(open.get()) {
 						LOG.info("Streaming DataPoints Complete: dps={}, elapsed={}", _okDataPoints.longValue(), System.currentTimeMillis()-startTime);

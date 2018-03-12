@@ -18,6 +18,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import io.grpc.MethodDescriptor;
+import net.opentsdb.grpc.server.handlers.Handler;
 
 
 /**
@@ -33,15 +34,17 @@ public class StreamerBuilder<T,R> {
 	protected Function<R, Integer> subItemsOut = (r) -> 1;
 	
 	protected final MethodDescriptor<T,R> md;
-	protected final BiFunction<T,StreamerContext,CompletableFuture<R>> streamerFx;
+	protected final Handler<T,R> handler;
 	
 
 	/**
 	 * Creates a new StreamerBuilder
+	 * @param md The method descriptor
+	 * @param handler The handler
 	 */
-	public StreamerBuilder(MethodDescriptor<T,R> md, BiFunction<T,StreamerContext,CompletableFuture<R>> streamerFx) {
+	public StreamerBuilder(MethodDescriptor<T,R> md, Handler<T,R> handler) {
 		this.md = md;
-		this.streamerFx = streamerFx;
+		this.handler = handler;
 	}
 	
 	
