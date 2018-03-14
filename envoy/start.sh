@@ -1,6 +1,5 @@
 #!/bin/bash
 # -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=1044
-AGENT=/home/nwhitehead/hprojects/jvm-name/target/jvm-name-1.0-SNAPSHOT.jar
 PORT=$1
 export GRPC_SERVER_PORT=$2
 export TSD_CONSUL_ALIASES=OpenTSDB-UI

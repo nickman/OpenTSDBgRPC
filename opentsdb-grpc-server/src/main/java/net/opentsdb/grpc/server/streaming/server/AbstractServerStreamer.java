@@ -13,12 +13,9 @@
 package net.opentsdb.grpc.server.streaming.server;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import org.apache.zookeeper.server.ServerStats;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,42 +29,27 @@ import net.opentsdb.grpc.server.handlers.Handler;
  * <p>Description: </p> 
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>net.opentsdb.grpc.server.streaming.server.AbstractServerStreamer</code></p>
+ * @param <T> The GRPC parameter type
+ * @param <R> The GRPC return type
  */
 
 public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> {
 	
 	protected final AtomicBoolean open;
-	protected long startTime = -1;
-	
 	protected final Function<T, Integer> subItemsIn;
 	protected final Function<R, Integer> subItemsOut;
-
-	
-	
-	
 	protected final MethodDescriptor<T,R> md;   // e.g. opentsdb.OpenTSDBService/Puts
 	protected final Handler<T,R> handler;
-	protected final ServerCallStreamObserver<R> ro;
-	protected final StreamObserver<R> responseObserver;
+	protected final ServerCallStreamObserver<R> responseObserver;
 	protected final StreamerContext sc;
-	
-	
 	protected final Logger LOG;
-	
-	
-	
-//	activeStreams.incrementAndGet();
-//	totalStreams.increment();
-//	
-//	return new StreamObserver<PutDatapoints>() {			
-//		final long startTime = System.currentTimeMillis();
-//		final LongAdder _receivedDataPoints = new AccumulatingLongAdder(receivedDataPoints);
-//		final LongAdder _okDataPoints = new AccumulatingLongAdder(okDataPoints);
-//		final LongAdder _failedDataPoints = new AccumulatingLongAdder(failedDataPoints);
-	
+	protected long startTime = -1;	
 	
 	/**
-	 * Creates a new BidiServerStreamer
+	 * Creates a new AbstractServerStreamer
+	 * @param builder The streamer builder
+	 * @param streamerContext The streamer context
+	 * @param responseObserver The client response observer
 	 */
 	public AbstractServerStreamer(StreamerBuilder<T,R> builder, StreamerContext streamerContext, StreamObserver<R> responseObserver) {
 		md = builder.methodDescriptor();
@@ -75,17 +57,16 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 		subItemsIn = builder.subItemsIn();
 		subItemsOut = builder.subItemsOut();
 		LOG = LoggerFactory.getLogger(md.getFullMethodName() + "." + getClass().getSimpleName());
-		ro = (ServerCallStreamObserver<R>)responseObserver;
+		this.responseObserver = (ServerCallStreamObserver<R>)responseObserver;
 		this.handler = builder.handler;
-		this.responseObserver = responseObserver;
 		sc = streamerContext; 
 		
-		ro.setOnCancelHandler(new Runnable() {
+		this.responseObserver.setOnCancelHandler(new Runnable() {
 			@Override
 			public void run() {
 				sc.cancellation();
-				System.err.println("\n\n========= CANCELLED: =============\n\t");
-				
+				LOG.warn("Stream Call Cancelled");
+				close();
 			}
 		});
 	}
@@ -126,9 +107,8 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 
 	@Override
 	public void onError(Throwable t) {
-		if(open.compareAndSet(true, false)) {
-			sc.decrementStreams();
-		}		
+		LOG.error("Streamer closing on error", t);
+		close();
 	}
 
 	@Override
@@ -136,14 +116,17 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 		LOG.info("COMPLETE");
 		R r = handler.closer(sc);
 		if(r!=null) {
-			ro.onNext(r);
+			responseObserver.onNext(r);
 			LOG.info("FINAL SENT");
 		}
-		ro.onCompleted();			
+		responseObserver.onCompleted();
+		close();
+	}
+
+	protected void close() {
 		if(open.compareAndSet(true, false)) {
 			sc.decrementStreams();
 		}
 	}
-	
 
 }

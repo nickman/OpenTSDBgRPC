@@ -171,15 +171,10 @@ message DataPoints {
 	repeated DataPoint datapoints = 1;
 }
 
-message PutOptions {
-	oneof detail {
-		bool summary = 1;
-		bool details = 2;
-	}
-}
+
 
 message PutDatapoints {
-	PutOptions options = 1;
+	bool details = 1;
 	repeated DataPoint dataPoints = 2;
 }
 
@@ -233,7 +228,7 @@ enum Aggregator {
 
 enum FillPolicy {
 	none = 0;
-	nan = 1;
+	NAN = 1;
 	NULL = 2;
 	zero = 3;
 }

@@ -13,8 +13,7 @@
 package net.opentsdb.grpc.server.streaming.server;
 
 import java.lang.management.ManagementFactory;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.BiFunction;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -34,6 +33,8 @@ import net.opentsdb.stats.StatsCollector;
  * <p>Description: </p> 
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>net.opentsdb.grpc.server.streaming.server.StreamerContainer</code></p>
+ * @param <T> The GRPC parameter type
+ * @param <R> The GRPC return type
  */
 
 public class StreamerContainer<T, R> implements StreamerContainerMXBean {
@@ -53,14 +54,20 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 	protected String grpcClass = null;
 	protected String grpcMethod = null;
 	
+	protected final AtomicLong bidiSerial = new AtomicLong();
+	protected final AtomicLong serverSerial = new AtomicLong();
+	
 	
 	/**
 	 * Creates a new StreamerContainer
+	 * @param builder The streamer builder
 	 */
 	public StreamerContainer(StreamerBuilder<T,R> builder) {
 		this.builder = builder;
 		this.handler = builder.handler;
 		md = builder.methodDescriptor();
+		
+		
 		methodType = md.getType();
 		LOG = LoggerFactory.getLogger(md.getFullMethodName() + "." + getClass().getSimpleName());
 		objectName = objectName();
@@ -69,6 +76,11 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 		LOG.info("Registered {} StreamerContainer for {}", methodType.name(), md.getFullMethodName());
 	}
 	
+	/**
+	 * Creates a new bidirectional server streamer for this container
+	 * @param responseObserver The client response observer
+	 * @return The new bidirectional server streamer
+	 */
 	public BidiServerStreamer<T,R> newBidiStreamer(StreamObserver<R> responseObserver) {
 		if(methodType != MethodType.BIDI_STREAMING) {
 			throw new IllegalArgumentException("The method [" + md.getFullMethodName() + "] is not of type BIDI_STREAMING");
@@ -77,6 +89,11 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 		return new BidiServerStreamer<T,R>(builder, new StreamerContext(ss), responseObserver);
 	}
 	
+	/**
+	 * Creates a new server streamer for this container
+	 * @param responseObserver The client response observer
+	 * @return The new server streamer
+	 */
 	public ServerStreamer<T,R> newServerStreamer(StreamObserver<R> responseObserver) {
 		if(methodType != MethodType.SERVER_STREAMING) {
 			throw new IllegalArgumentException("The method [" + md.getFullMethodName() + "] is not of type SERVER_STREAMING");
