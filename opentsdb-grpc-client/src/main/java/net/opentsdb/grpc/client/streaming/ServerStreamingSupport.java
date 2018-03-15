@@ -52,6 +52,15 @@ public abstract class ServerStreamingSupport<T, R> extends AbstractStreamer<T, R
 			LOG.error("Response Observer: Stream error", t);
 			completion.countDown();			
 		}
+		
+/*
+ * TODO: Detect Unavailable
+2018-03-14 11:56:58,457 ERROR [grpc-default-executor-0] OpenTSDBService/Puts: Response Observer: Stream error
+io.grpc.StatusRuntimeException: UNAVAILABLE: HTTP/2 error code: NO_ERROR
+Received Rst Stream
+	at io.grpc.Status.asRuntimeException(Status.java:526) ~[grpc-core-1.9.0.jar:1.9.0]
+	at io.grpc.stub.ClientCalls$StreamObserverToCallListenerAdapter.onClose(ClientCalls.java:419) [grpc-stub-1.9.0.jar:1.9.0]
+ */
 
 		@Override
 		public void onCompleted() {

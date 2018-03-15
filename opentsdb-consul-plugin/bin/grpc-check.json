@@ -1,0 +1,8 @@
+{
+    "ID": "opentsdb-grpc-check",
+    "Name": "Service health status",
+    "GRPC": "127.0.0.1:4249",
+    "GRPCUseTLS": false,
+    "Interval": "10s",
+    "ServiceID": "grpc-opentsdb@HeliosLeopard:4249"
+}

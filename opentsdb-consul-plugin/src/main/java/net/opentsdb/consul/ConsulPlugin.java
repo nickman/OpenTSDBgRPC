@@ -73,6 +73,9 @@ public class ConsulPlugin extends StartupPlugin {
 	
 	protected final CloseableHttpClient httpclient = HttpClients.createDefault();
 	
+	protected final Set<String> tsdAliasIds = new HashSet<>();
+	protected final Set<String> grpcAliasIds = new HashSet<>();
+	
 	
 	/**
 	 * {@inheritDoc}
@@ -156,7 +159,9 @@ public class ConsulPlugin extends StartupPlugin {
 			client.agentServiceRegister(ns);
 			for(String alias : tsdAliases) {
 				if(!"OpenTSDB".equals(alias)) {					
-					client.agentServiceRegister(alias(ns, alias, httpServiceId + "[" + alias + "]"));
+					String aliasId = httpServiceId + "-" + alias; 
+					tsdAliasIds.add(aliasId);
+					client.agentServiceRegister(alias(ns, alias, aliasId));
 				}
 			}
 			LOG.info("Registered OpenTSDB HTTP Service: checkInterval={}, dereg={}, aliases={}", checkInterval, deregisterAfter, Arrays.toString(tsdAliases));
@@ -178,7 +183,9 @@ public class ConsulPlugin extends StartupPlugin {
 				client.agentServiceRegister(ns);
 				for(String alias : grpcAliases) {
 					if(!"OpenTSDBGRPC".equals(alias)) {
-						client.agentServiceRegister(alias(ns, alias, grpcServiceId + "[" + alias + "]"));
+						String aliasId = grpcServiceId + "-" + alias;
+						grpcAliasIds.add(aliasId);
+						client.agentServiceRegister(alias(ns, alias, aliasId));
 					}
 				}
 				
@@ -227,12 +234,16 @@ public class ConsulPlugin extends StartupPlugin {
 				try {
 					AgentConsulClient client = consul();
 					if(httpServiceId != null) {
-						client.agentServiceDeregister(httpServiceId);
-						LOG.info("Deregistered OpenTSDB HTTP");
+						deregister(client, httpServiceId);
+						for(String aliasId : tsdAliasIds) {
+							deregister(client, aliasId);
+						}						
 					}
 					if(grpcServiceId != null) {
-						client.agentServiceDeregister(grpcServiceId);
-						LOG.info("Deregistered OpenTSDB gRPC");
+						deregister(client, grpcServiceId);
+						for(String aliasId : grpcAliasIds) {
+							deregister(client, aliasId);
+						}
 					}
 					LOG.info("Consul Services Unregistered");
 				} catch (Exception ex) {
@@ -246,6 +257,15 @@ public class ConsulPlugin extends StartupPlugin {
 		t.setDaemon(true);
 		t.start();
 		return def;
+	}
+	
+	protected void deregister(AgentConsulClient client, String id) {
+		try {
+			client.agentServiceDeregister(id);
+			LOG.info("Deregistered OpenTSDB Service: id={}", id);	
+		} catch (Exception ex) {
+			LOG.warn("Failed to deregister service: id={}, err={}", id,  ex);
+		}
 	}
 
 	/**

@@ -49,7 +49,13 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 	
 	
 	protected final StreamerContainer<PutDatapoints, PutDatapointsResponse> putDataPointsStreamContainer = 
-			new StreamerContainer<>(new StreamerBuilder<>(OpenTSDBServiceGrpc.getPutsMethod(), this));
+			new StreamerContainer<>(new StreamerBuilder<>(OpenTSDBServiceGrpc.getPutsMethod(), this)
+				.subItemsIn(this::countIn)
+				.subItemsOut(this::countOut)
+			);
+	
+	public int countIn(PutDatapoints pd) { return pd.getDataPointsCount(); }
+	public int countOut(PutDatapointsResponse pdr) { return (int)(pdr.getFailed() + pdr.getSuccess()); }
 
 	/**
 	 * Creates a new DataPointStreamHandler
@@ -77,11 +83,13 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 
 	@Override
 	public CompletableFuture<PutDatapointsResponse> invoke(PutDatapoints putDatapoints, StreamerContext sc) {
+		final boolean details = putDatapoints.getDetails();
 		CompletableFuture<PutDatapointsResponse> cf = new CompletableFuture<PutDatapointsResponse>();
 		final LongAdder _okDataPoints = sc.accProcessedItems();
 		final LongAdder _failedDataPoints = sc.accFailedItems();
+		final List<PutDatapointError> errors = details ? new ArrayList<>() : null;
 		int dpSize = putDatapoints.getDataPointsCount();
-		LOG.info("Putting Datapoints: count={}", dpSize);
+		LOG.info("Putting Datapoints: count={}, details={}", dpSize, details);
 		try {
 			List<Deferred<Object>> defs = new ArrayList<>(dpSize);
 			for(int idx = 0; idx < dpSize; idx ++) {
@@ -108,22 +116,51 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 							}, 
 							err -> {
 								_failedDataPoints.increment();
-								LOG.warn("DataPoint put failed: {}", dp, err);
+								if(details) {
+									errors.add(PutDatapointError.newBuilder()
+											.setDataPoint(dp)
+											.setError(err.getMessage())
+											.build());
+								}
+								if(LOG.isDebugEnabled()) {
+									LOG.warn("DataPoint put failed: dp={}", dp, err);
+								} else {
+									LOG.warn("DataPoint put failed: dp={}, err={}", dp, err);
+								}
 							}
 					);
 					defs.add(def);
 				} catch (Exception err) {
 					_failedDataPoints.increment();
-					LOG.warn("Failed to handle DataPoint: {}", dp, err);
+					if(details) {
+						errors.add(PutDatapointError.newBuilder()
+								.setDataPoint(dp)
+								.setError(err.getMessage())
+								.build());
+					}
+					if(LOG.isDebugEnabled()) {
+						LOG.warn("DataPoint put failed: dp={}", dp, err);
+					} else {
+						LOG.warn("DataPoint put failed: dp={}, err={}", dp, err);
+					}
 				}
 			}
 			LOG.info("Grouping DPoint Deferreds: {}", defs.size());
-			SuAsyncHelpers.singleTBoth(Deferred.group(defs), (o,t) -> {
-				if(t!=null) {
-					LOG.error("Batch Write Failed", t);							
-				}
-				cf.complete(response(_okDataPoints.longValue(), _failedDataPoints.longValue(), false));
-			});		
+			if(sc.isOpen()) {
+				SuAsyncHelpers.singleTBoth(Deferred.group(defs), (o,t) -> {
+					if(t!=null) {
+						LOG.error("Batch Write Failed", t);							
+					}
+					if(sc.isOpen()) {
+						cf.complete(response(_okDataPoints.longValue(), _failedDataPoints.longValue(), errors, false));
+					} else {
+						LOG.info("Response not sent due to cancellation");
+					}
+				});
+			} else {
+				LOG.info("Response not prepared due to cancellation");
+				cf.complete(null);
+			}
 		} catch (Exception ex) {			
 			LOG.error("DP Failure", ex);
 			cf.completeExceptionally(ex);
@@ -134,7 +171,7 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 
 	@Override
 	public PutDatapointsResponse closer(StreamerContext sc) {
-		return response(sc.getProcessedItems(), sc.getFailedItems(), true);
+		return response(sc.getProcessedItems(), sc.getFailedItems(), null, true);
 	}
 	
 	/**
@@ -144,14 +181,16 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 	 * @param finalResponse true if final, false otherwise
 	 * @return the final PutDatapointsResponse
 	 */
-	protected PutDatapointsResponse response(long ok, long err, boolean finalResponse) {
-		PutDatapointsResponse pdr = PutDatapointsResponse.newBuilder()
+	protected PutDatapointsResponse response(long ok, long err, List<PutDatapointError> errors, boolean finalResponse) {
+		PutDatapointsResponse.Builder pdr = PutDatapointsResponse.newBuilder()
 				.setFailed(err)
 				.setSuccess(ok)
-				.setFinalResponse(finalResponse)
-				.build();
+				.setFinalResponse(finalResponse);
+		if(errors!=null && !errors.isEmpty()) {
+			pdr.addAllErrors(errors);
+		}
 		LOG.info("Sending PDR: ok={}, failed={}, final={}", ok, err, finalResponse);
-		return pdr;
+		return pdr.build();
 	}
 	
 	/**

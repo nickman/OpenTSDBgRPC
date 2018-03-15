@@ -20,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.grpc.MethodDescriptor;
+import io.grpc.StatusRuntimeException;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.grpc.server.handlers.Handler;
@@ -107,7 +108,11 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 
 	@Override
 	public void onError(Throwable t) {
-		LOG.error("Streamer closing on error", t);
+		if(StatusRuntimeException.class.isInstance(t) && t.getMessage().contains("CANCELLED:")) {
+			// Handled by cancellation runnable
+		} else {
+			LOG.error("Streamer closing on error", t);
+		}		
 		close();
 	}
 

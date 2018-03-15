@@ -44,7 +44,6 @@ import net.opentsdb.grpc.SubQueryResponse;
 import net.opentsdb.grpc.TSDBAnnotation;
 import net.opentsdb.grpc.Uid;
 import net.opentsdb.grpc.server.handlers.AnnotationHandler;
-import net.opentsdb.grpc.server.handlers.DataPointPutHandler;
 import net.opentsdb.grpc.server.handlers.DataPointStreamHandler;
 import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.query.filter.TagVFilter;

@@ -1,0 +1,9 @@
+net/opentsdb/plugin/common/util/AccumulatingLongAdder.class
+net/opentsdb/plugin/common/util/TUnit.class
+net/opentsdb/plugin/common/isolation/BootRpcPlugin.class
+net/opentsdb/plugin/common/isolation/IsolatedClassLoader$FindClassClassLoader.class
+net/opentsdb/plugin/common/isolation/IsolatedClassLoader$ChildURLClassLoader.class
+net/opentsdb/plugin/common/Configuration.class
+net/opentsdb/plugin/common/util/RelTime.class
+net/opentsdb/plugin/common/isolation/IsolatedClassLoader.class
+net/opentsdb/plugin/common/isolation/BootStartupPlugin.class

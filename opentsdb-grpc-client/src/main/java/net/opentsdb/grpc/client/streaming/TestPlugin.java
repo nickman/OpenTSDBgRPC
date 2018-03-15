@@ -33,7 +33,6 @@ import net.opentsdb.grpc.OpenTSDBServiceGrpc;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceStub;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
-import net.opentsdb.grpc.PutOptions;
 import net.opentsdb.grpc.client.util.ClientConfiguration;
 
 /**
@@ -121,11 +120,12 @@ public class TestPlugin {
 			MetricTags mtags = MetricTags.newBuilder().putAllTags(tags).build();
 			stream.start();		
 			int total = 0;
-			for(int x = 0; x < 100; x++) {
-				PutDatapoints.Builder pdb = PutDatapoints.newBuilder();
+			for(int x = 0; x < 3; x++) {
+				PutDatapoints.Builder pdb = PutDatapoints.newBuilder().setDetails(true);
 				for(int i = 0; i < 100; i++) {
 					DataPoint dp = DataPoint.newBuilder()
-							.setMetric(i==300 ? ("xxx" + i) : ("xxx" + i))
+							.setMetric(i==30 ? ("x:xx" + i) : ("xxx" + i))
+//							.setMetric(("xxx" + i))
 							.setMetricTags(mtags)
 							.setTimestamp(System.currentTimeMillis())
 							.setValue(i * 13)
@@ -155,8 +155,7 @@ public class TestPlugin {
 
 	public void addDataPoints() {
 		// put(PutDatapoints request, StreamObserver<PutDatapointsResponse> responseObserver) 
-		PutDatapoints.Builder pd = PutDatapoints.newBuilder();
-		pd.setOptions(PutOptions.newBuilder().setDetails(true).build());
+		PutDatapoints.Builder pd = PutDatapoints.newBuilder().setDetails(true);
 		Map<String, String> tags = new HashMap<>();
 		tags.put("foo", "bar");
 		MetricTags mtags = MetricTags.newBuilder().putAllTags(tags).build();
@@ -164,7 +163,7 @@ public class TestPlugin {
 			for(int i = 0; i < 10000; i++) {
 				pd.addDataPoints(
 						DataPoint.newBuilder()
-						.setMetric("xxx" + i)
+						.setMetric(i%1000==0 ? ("xxx" + i) : ("xx:x" + i))
 						.setMetricTags(mtags)
 						.setTimestamp(System.currentTimeMillis())
 						.setValue(i * 13)
