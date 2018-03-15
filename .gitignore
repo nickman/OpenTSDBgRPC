@@ -7,6 +7,14 @@
 # BlueJ files
 *.ctxt
 
+# Eclipse / Maven
+target/
+.classpath
+.project
+.settings/
+dependency-reduced-pom.xml
+
+
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
 

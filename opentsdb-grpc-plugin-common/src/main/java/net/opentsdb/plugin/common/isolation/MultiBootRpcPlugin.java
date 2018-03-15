@@ -41,12 +41,17 @@ public class MultiBootRpcPlugin extends RpcPlugin {
 	protected final Set<RpcPlugin> delegates = new LinkedHashSet<>();
 	protected final String[] delegateClassNames;
 	protected IsolatedClassLoader icl;
+	protected String version = getClass().getPackage().getImplementationVersion();
 	
 	/**
 	 * Creates a new MultiBootRpcPlugin
+	 * @param rpcClassNames The class names of the delegates to load
 	 */	
 	public MultiBootRpcPlugin(String...rpcClassNames) {
 		delegateClassNames = rpcClassNames;
+		if(version==null) {
+			version = "Unassigned";
+		}
 	}
 
 	/**
@@ -92,10 +97,15 @@ public class MultiBootRpcPlugin extends RpcPlugin {
 						}
 					}
 					if(!defs.isEmpty()) {
-						Deferred.group(defs).addBoth(a -> {
+						try {
+							Deferred.group(defs).join(5000);
+							LOG.info("{} delegate plugins shutdown", defs.size());
+						} catch (Exception ex) {
+							LOG.warn("Timed out waiting for delegates to shut down");
+						} finally {
+							
 							def.callback(null);
-							return null;
-						});
+						}
 					}
 			}
 		};
@@ -110,8 +120,7 @@ public class MultiBootRpcPlugin extends RpcPlugin {
 	 */
 	@Override
 	public String version() {
-		// TODO Auto-generated method stub
-		return null;
+		return version;
 	}
 
 	/**
@@ -120,8 +129,18 @@ public class MultiBootRpcPlugin extends RpcPlugin {
 	 */
 	@Override
 	public void collectStats(StatsCollector collector) {
-		// TODO Auto-generated method stub
-
+		for(RpcPlugin delegate : delegates) {
+			collector.addExtraTag("delegate", delegate.getClass().getSimpleName());
+			try {
+				delegate.collectStats(collector);
+			} catch (Exception ex) {
+				LOG.warn("Failed to collect stats from RpcPlugin delegate: plugin={}, err={}",
+						delegate.getClass().getName(), ex
+				);
+			} finally {
+				collector.clearExtraTag("delegate");
+			}
+		}
 	}
 
 }
