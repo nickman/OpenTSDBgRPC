@@ -41,6 +41,11 @@
             <version>${project.version}</version>
         </dependency>
         
+        <dependency>
+                <groupId>org.helios.helios-native</groupId>
+                <artifactId>helios-native-sigar</artifactId>
+        </dependency>
+
 
         <dependency>
               <groupId>io.netty</groupId>

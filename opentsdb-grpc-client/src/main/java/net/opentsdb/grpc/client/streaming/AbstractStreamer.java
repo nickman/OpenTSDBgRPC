@@ -12,6 +12,8 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.grpc.client.streaming;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Collections;
@@ -54,7 +56,7 @@ import io.grpc.stub.StreamObserver;
  * <p><code>net.opentsdb.grpc.server.streaming.AbstractStreamer</code></p>
  */
 
-public abstract class AbstractStreamer<T, R> implements Streamer<T, R> {
+public abstract class AbstractStreamer<T, R> implements Streamer<T, R>, Closeable {
 	private static final Class<?>[] DEFAULT_TYPES = new Class[] {Object.class, Object.class};
 	private static final Cache<MethodDescriptor<?, ?>, RPCTypes<?,?>> TYPE_CACHE = 
 			CacheBuilder.newBuilder()
@@ -74,7 +76,7 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R> {
 	protected final MethodType methodType;
 	protected final Consumer<R> outConsumer;
 	
-	protected Consumer<Streamer<T,R>> onComplete;
+	protected Consumer<Streamer<T,R>> onComplete = r -> {};
 	
 	protected final LongAdder requestsSent = new LongAdder();
 	protected final LongAdder responsesReceived = new LongAdder();		
@@ -87,8 +89,8 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R> {
 	protected final AtomicBoolean streamerClosed = new AtomicBoolean(true);
 	
 	protected final Function<R, Boolean> isFinalFx;
-	protected final Function<T, Integer> subItemsIn;
-	protected final Function<R, Integer> subItemsOut;
+	protected final Function<T, Long> subItemsIn;
+	protected final Function<R, Long> subItemsOut;
 	protected final Function<R, Boolean> finalResponse;
 	
 	
@@ -98,6 +100,7 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R> {
 
 	protected final RPCTypes<T,R> rpcTypes;
 	protected final boolean expectsFinalResponse;
+
 	protected final AtomicBoolean finalResponseReceived = new AtomicBoolean(false);
 	
 	protected final CallOptions callOptions;
@@ -111,9 +114,28 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R> {
 	
 	protected ClientCallStreamObserver<T> requestStream;
 	
+	@Override
+	public void close() throws IOException {
+		if(clientClosed.compareAndSet(false, true)) {
+			try { clientCall.halfClose(); } catch (Exception x) {/* No Op */}
+		}
+		if(streamerClosed.compareAndSet(false, true)) {
+			try { requestObserver.onCompleted(); } catch (Exception x) {/* No Op */}
+			try { responseObserver.onCompleted(); } catch (Exception x) {/* No Op */}
+			try { requestStream.onCompleted(); } catch (Exception x) {/* No Op */}
+			if(inQueue!=null) {
+				inQueue.clear();
+			}
+			onComplete.accept(this);
+		}
+		LOG.info("Streamer Closed: {}", md.getFullMethodName());
+	}
+
+	
 	public static class RPCTypes<T,R> {
 		private static Logger LOG = LoggerFactory.getLogger(RPCTypes.class);
 		
+		@SuppressWarnings({ "unchecked", "rawtypes" })
 		public static final RPCTypes DEFAULT_TYPE = new RPCTypes(Object.class, Object.class, false); 
 		
 		public final Class<T> requestType;
@@ -187,6 +209,7 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R> {
 		RPCTypes<T,R> types = (RPCTypes<T, R>) TYPE_CACHE.getIfPresent(md);
 		return types==null ? RPCTypes.DEFAULT_TYPE : types;
 	}
+	
 	
 	/**
 	 * Creates a new AbstractStreamer
@@ -324,6 +347,9 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R> {
 		return onReadyEvents.longValue();
 	}
 	
+	public boolean isExpectsFinalResponse() {
+		return expectsFinalResponse;
+	}
 
 
 }

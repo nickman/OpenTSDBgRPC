@@ -19,6 +19,7 @@ import java.util.function.Function;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.MethodDescriptor;
+import net.opentsdb.grpc.client.StreamDescriptor;
 
 /**
  * <p>Title: BaseStreamerBuilder</p>
@@ -33,8 +34,8 @@ public class StreamerBuilder<T,R> {
 	protected final Consumer<R> outConsumer;
 
 	
-	protected Function<T, Integer> subItemsIn = (t) -> 1;
-	protected Function<R, Integer> subItemsOut = (r) -> 1;
+	protected Function<T, Long> subItemsIn = (t) -> 1L;
+	protected Function<R, Long> subItemsOut = (r) -> 1L;
 	protected Function<R, Boolean> finalResponse = (r) -> false;
 	
 	protected Consumer<Streamer<T,R>> onComplete = null;
@@ -54,6 +55,17 @@ public class StreamerBuilder<T,R> {
 	public static <T,R> StreamerBuilder<T,R> newBuilder(Channel channel, MethodDescriptor<T, R> methodDescriptor, Consumer<R> outConsumer) {
 		return new StreamerBuilder<T,R>(channel, methodDescriptor, outConsumer);
 	}
+	
+	/**
+	 * Creates a new StreamerBuilder that discards incoming responses
+	 * @param channel The managed channel to build the streamer with
+	 * @param methodDescriptor The method to call
+	 * @return The StreamerBuilder
+	 */
+	public static <T,R> StreamerBuilder<T,R> newBuilder(Channel channel, MethodDescriptor<T, R> methodDescriptor) {
+		return new StreamerBuilder<T,R>(channel, methodDescriptor, r -> {});
+	}
+	
 	
 	/**
 	 * Creates a new StreamerBuilder
@@ -91,20 +103,27 @@ public class StreamerBuilder<T,R> {
 		return outConsumer;
 	}
 	
-	public Function<T, Integer> subItemsIn() {
+	public Function<T, Long> subItemsIn() {
 		return subItemsIn;
 	}
+	
+	public StreamerBuilder<T,R> descriptor(StreamDescriptor<T,R> desc) {
+		subItemsIn = desc::subItemsIn;
+		subItemsOut = desc::subItemsOut;
+		finalResponse = desc::finalResponse;
+		return this;
+	}
 
-	public StreamerBuilder<T,R> subItemsIn(Function<T, Integer> subItemsIn) {
+	public StreamerBuilder<T,R> subItemsIn(Function<T, Long> subItemsIn) {
 		this.subItemsIn = Objects.requireNonNull(subItemsIn, "Passed Inbound SubItem Counter was null");;
 		return this;
 	}
 
-	public Function<R, Integer> subItemsOut() {
+	public Function<R, Long> subItemsOut() {
 		return subItemsOut;
 	}
 
-	public StreamerBuilder<T,R> subItemsOut(Function<R, Integer> subItemsOut) {
+	public StreamerBuilder<T,R> subItemsOut(Function<R, Long> subItemsOut) {
 		this.subItemsOut = Objects.requireNonNull(subItemsOut, "Passed Outbound SubItem Counter was null");
 		return this;
 	}
@@ -136,6 +155,7 @@ public class StreamerBuilder<T,R> {
 
 	public StreamerBuilder<T,R> callOptions(CallOptions callOptions) {
 		this.callOptions = Objects.requireNonNull(callOptions, "CallOptions was null");
+		this.inQueueSize = this.callOptions.getOption(StreamDescriptor.DatapointsDescriptor.QUEUE_SIZE);
 		return this;
 	}
 

@@ -40,7 +40,7 @@ public class ClientStreamer<T, R> extends AbstractStreamer<T, R> {
 		if(clientClosed.get()) {
 			throw new IllegalStateException("Streamer client is closed");
 		}
-		int inCount = subItemsIn.apply(t);
+		long inCount = subItemsIn.apply(t);
 		if(noQueue || requestStream.isReady() ) {
 			requestStream.onNext(t);
 			requestStream.request(1);

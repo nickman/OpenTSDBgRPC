@@ -29,7 +29,7 @@ public class BidiStreamer<T, R> extends ServerStreamingSupport<T,R> {
 	
 	public BidiStreamer<T,R> start() {
 		super.start();
-		LOG.info("Bidi Stream Started");
+		LOG.info("BidiStreamer Started: {}", md.getFullMethodName());
 		return this;
 	}
 	
@@ -37,7 +37,7 @@ public class BidiStreamer<T, R> extends ServerStreamingSupport<T,R> {
 		if(clientClosed.get()) {
 			throw new IllegalStateException("Streamer client is closed");
 		}
-		int inCount = subItemsIn.apply(t);
+		long inCount = subItemsIn.apply(t);
 		if(noQueue || requestStream.isReady() ) {
 			requestStream.onNext(t);
 			requestStream.request(1);

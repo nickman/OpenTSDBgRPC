@@ -13,8 +13,8 @@ service OpenTSDBService {
 	rpc S(ContentName) returns (Content) {}
 	rpc GetAggregators(Empty) returns (AggregatorNames) {}
 	rpc GetAnnotation(AnnotationRequest) returns (TSDBAnnotation) {}
-	rpc CreateAnnotations(stream TSDBAnnotation) returns (stream CreateAnnotationResponse) {}
-	rpc UpdateAnnotations(stream TSDBAnnotation) returns (stream CreateAnnotationResponse) {}
+	rpc CreateAnnotations(stream TSDBAnnotations) returns (stream CreateAnnotationResponse) {}
+	rpc UpdateAnnotations(stream TSDBAnnotations) returns (stream UpdateAnnotationResponse) {}
 	rpc DeleteAnnotations(TSDBAnnotation) returns (TSDBAnnotation) {}
 	rpc BulkDeleteAnnotations(BulkAnnotationRequest) returns (BulkAnnotationResponse) {}
 	rpc GetConfiguration(Empty) returns (KeyValues) {}
@@ -32,10 +32,26 @@ service OpenTSDBService {
 	rpc RenameUid(Reassignment) returns (Empty) {}
 	rpc RenameUids(stream Reassignment) returns (stream Count) {}
 	
+	rpc ExecuteQuery(DataPointQuery) returns (stream DataPoints) {}
+	
+/*	
 	rpc ExecuteQuery(Query) returns (QueryResponse) {}
 	rpc ExecuteQueries(Query) returns (stream SubQueryResponse) {}
+*/
 	
+	rpc ping(Ping) returns (Pong) {}
+}
 
+message Ping {
+	string msg = 1;
+	int64 sendTime = 2;
+}
+
+message Pong {
+	string msg = 1;
+	string host = 2;
+	int64 sendElapsedTime = 3;
+	int64 receiveTime = 4;
 }
 
 message HttpResponse {
@@ -91,6 +107,11 @@ message TSDBAnnotation {
 	map<string, string> custom = 6;	
 }
 
+message TSDBAnnotations {
+	bool details = 1;
+	repeated TSDBAnnotation annotations = 2;
+}
+
 message AnnotationRequest {
 	int64 startTime = 1;
 	TsuidBorS tsuid  = 2;
@@ -103,7 +124,22 @@ message CreateAnnotationResponse {
 	repeated CreateAnnotationError errors = 4;
 }
 
+message UpdateAnnotationResponse {
+	int64 success = 1;
+	int64 failed = 2;
+	bool finalResponse = 3;
+	repeated UpdateAnnotationError errors = 4;
+}
+
+
+
+
 message CreateAnnotationError {
+	string error = 1;
+	TSDBAnnotation annotation = 2;
+}
+
+message UpdateAnnotationError {
 	string error = 1;
 	TSDBAnnotation annotation = 2;
 }
@@ -190,6 +226,13 @@ message PutDatapointsResponse {
 	repeated PutDatapointError errors = 4;
 }
 
+message DPoint {
+	double value = 1;
+	int64 timestamp = 2;
+}
+
+
+
 enum Aggregator {
 	SUM = 0;
 	PFSUM = 1;
@@ -266,8 +309,8 @@ message Aggregation {
 message RateOptions {
 	bool rate = 1;
 	bool counter = 2;
-	int32 counterMax = 3;
-	int32 resetValue = 4;
+	int64 counterMax = 3;
+	int64 resetValue = 4;
 	bool dropResets = 5;
 }
 
@@ -305,17 +348,6 @@ message Filters {
 
 
 
-message SubQuery {
-	Aggregator aggregator = 1;
-	oneof metrics {
-		MetricTags metricTags = 2;
-		Tsuids tsuids = 3;
-	}		
-	RateOptions rateOptions = 4;
-	Downsample downSample = 5;
-	Filters filters = 6;
-	Percentiles percentiles = 7;		
-}
 
 message SubQueries {
 	repeated SubQuery queries = 1;
@@ -357,6 +389,51 @@ message StatsMaps {
 	repeated StatsMap stats = 1;
 }
 
+message DataPointQuery {
+	DateTime startTime = 1;
+	DateTime endTime = 2;
+	oneof metrics {
+		MetricAndTags metricAndTags = 3;
+		Tsuids tsuids = 4;
+	}			
+	Aggregator aggregator = 5;
+	bool rate = 6;
+	RateOptions rateOptions = 7;
+	Downsample downSample = 8;
+}
+
+message MetricAndTags {
+	string metric = 1;
+	MetricTags tags = 2;
+}
+
+message SubQuery {
+	Aggregator aggregator = 1;
+	oneof metrics {
+		MetricTags metricTags = 2;
+		Tsuids tsuids = 3;
+	}		
+	RateOptions rateOptions = 4;
+	Downsample downSample = 5;
+	Filters filters = 6;
+	Percentiles percentiles = 7;		
+}
+
+message QueryResponse {  // Represents a net.opentsdb.core.DataPoints[]
+	repeated string aggregatedTags = 1;
+	TSDBAnnotations annotations = 2;
+	int32 queryIndex = 3;
+	string metric = 4;
+	MetricTags tags = 5;
+	Tsuids tsuids = 6;
+	repeated DPoint dataPoints = 7;
+}
+
+
+
+// String metric, Map<String,String> tags, Aggregator function, boolean rate
+
+/*
 message Query {
 	DateTime startTime = 1;
 	DateTime endTime = 2;
@@ -387,7 +464,7 @@ message QueryResponse {
 	repeated SubQueryResponse resonses = 1;
 	map<string, double> statsSummary = 2;
 }
-
+*/
 
 
 

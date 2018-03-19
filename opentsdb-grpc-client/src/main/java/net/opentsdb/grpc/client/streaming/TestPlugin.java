@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.grpc.CallOptions;
+import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
@@ -30,7 +31,9 @@ import net.opentsdb.grpc.DataPoint;
 import net.opentsdb.grpc.Empty;
 import net.opentsdb.grpc.MetricTags;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc;
+import net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceBlockingStub;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceStub;
+import net.opentsdb.grpc.Ping;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
 import net.opentsdb.grpc.client.util.ClientConfiguration;
@@ -98,9 +101,29 @@ public class TestPlugin {
 		
 	}
 	
+	/*
+	 * Out Consumer
+	 * CallOptions (gzip, waitForReady, deadline, executor, max in/out message size, custom option, )
+	 * SubItemsIn Counter
+	 * SubItemsOut Counter
+	 * In Queue Size
+	 */
+	
 	public void streamer() {
-		ManagedChannel mc = ClientConfiguration.builder()
-				.build();
+		ManagedChannel mc = ClientConfiguration.clientConfiguration().build();
+		
+		ConnectivityState cs = mc.getState(true);
+		LOG.info("CS: {}", cs);
+		mc.notifyWhenStateChanged(cs, () -> {
+			ConnectivityState ncs = mc.getState(true);
+			LOG.info("CS Changed: {}", ncs);
+			mc.notifyWhenStateChanged(ncs, () -> {
+				LOG.info("CS Changed Again: {}", ncs);
+			});
+		});
+		OpenTSDBServiceBlockingStub bstub = OpenTSDBServiceGrpc.newBlockingStub(mc);
+		LOG.info("Ping: {}", bstub.ping(Ping.newBuilder().setMsg("ping").setSendTime(System.currentTimeMillis()).build()));
+		
 		try {
 			BidiStreamer<PutDatapoints,PutDatapointsResponse> stream = StreamerBuilder.newBuilder(channel, OpenTSDBServiceGrpc.getPutsMethod(), r -> {
 				if(r.getFinalResponse()) {
@@ -109,10 +132,14 @@ public class TestPlugin {
 					LOG.info("Intermediate: {}", r);
 				}
 			})
-			.callOptions(CallOptions.DEFAULT.withCompression("gzip").withWaitForReady())
+			.callOptions(
+					CallOptions.DEFAULT
+					.withCompression("gzip")
+					.withWaitForReady()
+			)
 			.finalResponse(pdr -> pdr.getFinalResponse())
-			.subItemsOut(out -> (int)(out.getFailed() + out.getSuccess()))
-			.subItemsIn(in -> in.getDataPointsCount())
+			.subItemsOut(out -> (out.getFailed() + out.getSuccess()))
+			.subItemsIn(in -> new Long(in.getDataPointsCount()))
 			.inQueueSize(10000)
 			.buildBidiStreamer();
 			Map<String, String> tags = new HashMap<>();
@@ -120,12 +147,12 @@ public class TestPlugin {
 			MetricTags mtags = MetricTags.newBuilder().putAllTags(tags).build();
 			stream.start();		
 			int total = 0;
-			for(int x = 0; x < 3; x++) {
+			for(int x = 0; x < 300; x++) {
 				PutDatapoints.Builder pdb = PutDatapoints.newBuilder().setDetails(true);
 				for(int i = 0; i < 100; i++) {
 					DataPoint dp = DataPoint.newBuilder()
-							.setMetric(i==30 ? ("x:xx" + i) : ("xxx" + i))
-//							.setMetric(("xxx" + i))
+//							.setMetric(i==30 ? ("x:xx" + i) : ("xxx" + i))
+							.setMetric(("xxx" + i))
 							.setMetricTags(mtags)
 							.setTimestamp(System.currentTimeMillis())
 							.setValue(i * 13)
@@ -134,7 +161,7 @@ public class TestPlugin {
 					total++;
 				}
 				stream.send(pdb.build());
-				try { Thread.sleep(1000); } catch (Exception xx) {}
+				try { Thread.sleep(5000); } catch (Exception xx) {}
 			}
 			stream.clientComplete();
 			LOG.info("Sent {} Datapoints", total);

@@ -5,6 +5,7 @@ package net.opentsdb.grpc.server;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -19,31 +20,30 @@ import com.google.protobuf.ByteString;
 
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.core.Aggregators;
+import net.opentsdb.core.Query;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.AggregatorName;
 import net.opentsdb.grpc.AggregatorNames;
-import net.opentsdb.grpc.AnnotationRequest;
 import net.opentsdb.grpc.Assignment;
-import net.opentsdb.grpc.BulkAnnotationRequest;
-import net.opentsdb.grpc.BulkAnnotationResponse;
 import net.opentsdb.grpc.Content;
 import net.opentsdb.grpc.ContentName;
 import net.opentsdb.grpc.Count;
 import net.opentsdb.grpc.CreateAnnotationResponse;
+import net.opentsdb.grpc.DataPointQuery;
+import net.opentsdb.grpc.DataPoints;
 import net.opentsdb.grpc.Empty;
 import net.opentsdb.grpc.FilterMeta;
 import net.opentsdb.grpc.FilterMetas;
 import net.opentsdb.grpc.KeyValues;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase;
+import net.opentsdb.grpc.Ping;
+import net.opentsdb.grpc.Pong;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
-import net.opentsdb.grpc.Query;
-import net.opentsdb.grpc.QueryResponse;
 import net.opentsdb.grpc.Reassignment;
-import net.opentsdb.grpc.SubQueryResponse;
-import net.opentsdb.grpc.TSDBAnnotation;
+import net.opentsdb.grpc.TSDBAnnotations;
 import net.opentsdb.grpc.Uid;
-import net.opentsdb.grpc.server.handlers.AnnotationHandler;
+import net.opentsdb.grpc.server.handlers.AnnotationStreamHandler;
 import net.opentsdb.grpc.server.handlers.DataPointStreamHandler;
 import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.query.filter.TagVFilter;
@@ -58,13 +58,16 @@ import net.opentsdb.stats.StatsCollector;
 public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	private static final Logger LOG = LoggerFactory.getLogger(OpenTSDBServer.class);
 	private static final Pattern SLASH_SPLITTER = Pattern.compile("/");
+	private static final String host = ManagementFactory.getRuntimeMXBean().getName().split("@")[1];
 	private final TSDB tsdb;
 	private final Configuration cfg;
 	private final File staticDir;
 	private final Path staticPath;
 	private final AggregatorNames aggrNames;
 	private final DataPointStreamHandler putHandler;
-	private final AnnotationHandler annHandler;
+	private final AnnotationStreamHandler annHandler;
+	private final String serverId; 
+	
 
 
 	/**
@@ -79,7 +82,8 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 		staticPath = staticDir.toPath();
 		aggrNames = buildAggregatorNames();
 		putHandler = new DataPointStreamHandler(tsdb, cfg);
-		annHandler = new AnnotationHandler(tsdb, cfg);
+		annHandler = new AnnotationStreamHandler(tsdb, cfg);
+		serverId = host + ":" + cfg.config(Configuration.GRPC_PORT, -1);
 	}
 
 	private AggregatorNames buildAggregatorNames() {
@@ -93,6 +97,21 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	
 	public void collectStats(StatsCollector collector) {
 		putHandler.collectStats(collector);
+	}
+	
+	@Override
+	public void ping(Ping ping, StreamObserver<Pong> responseObserver) {
+		long receivedTime = System.currentTimeMillis();
+		LOG.info("Ping: {}", ping);		
+		long sendElapsed = receivedTime - ping.getSendTime();
+		responseObserver.onNext(Pong.newBuilder()
+				.setHost(serverId)
+				.setMsg(ping.getMsg() + "-->pong")
+				.setReceiveTime(receivedTime)
+				.setSendElapsedTime(sendElapsed)
+				.build()
+		);
+		responseObserver.onCompleted();
 	}
 
 
@@ -131,22 +150,31 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 		responseObserver.onNext(aggrNames);
 		responseObserver.onCompleted();
 	}
+	
 
-	/**
-	 * {@inheritDoc}
-	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#getAnnotation(net.opentsdb.grpc.AnnotationRequest, io.grpc.stub.StreamObserver)
-	 */
 	@Override
-	public void getAnnotation(AnnotationRequest request, StreamObserver<TSDBAnnotation> responseObserver) {
-		annHandler.getAnnotation(request, responseObserver);
+	public void executeQuery(DataPointQuery request, StreamObserver<DataPoints> responseObserver) {
+		final Query q = ProtoConverters.from(request, tsdb.newQuery());
+		SuAsyncHelpers.singleTBoth(q.runAsync(), (dps, err) -> {
+			
+		});
+		
 	}
+//	/**
+//	 * {@inheritDoc}
+//	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#getAnnotation(net.opentsdb.grpc.AnnotationRequest, io.grpc.stub.StreamObserver)
+//	 */
+//	@Override
+//	public void getAnnotation(AnnotationRequest request, StreamObserver<TSDBAnnotation> responseObserver) {
+//		annHandler.getAnnotation(request, responseObserver);
+//	}
 
 	/**
 	 * {@inheritDoc}
 	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#createAnnotations(io.grpc.stub.StreamObserver)
 	 */
 	@Override
-	public StreamObserver<TSDBAnnotation> createAnnotations(StreamObserver<CreateAnnotationResponse> responseObserver) {
+	public StreamObserver<TSDBAnnotations> createAnnotations(StreamObserver<CreateAnnotationResponse> responseObserver) {
 		return annHandler.createAnnotations(responseObserver);
 	}
 
@@ -161,24 +189,24 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	
 	
 
-	/**
-	 * {@inheritDoc}
-	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#deleteAnnotations(net.opentsdb.grpc.TSDBAnnotation, io.grpc.stub.StreamObserver)
-	 */
-	@Override
-	public void deleteAnnotations(TSDBAnnotation request, StreamObserver<TSDBAnnotation> responseObserver) {
-		annHandler.deleteAnnotations(request, responseObserver);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#bulkDeleteAnnotations(net.opentsdb.grpc.BulkAnnotationRequest, io.grpc.stub.StreamObserver)
-	 */
-	@Override
-	public void bulkDeleteAnnotations(BulkAnnotationRequest request,
-			StreamObserver<BulkAnnotationResponse> responseObserver) {
-		annHandler.bulkDeleteAnnotations(request, responseObserver);
-	}
+//	/**
+//	 * {@inheritDoc}
+//	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#deleteAnnotations(net.opentsdb.grpc.TSDBAnnotation, io.grpc.stub.StreamObserver)
+//	 */
+//	@Override
+//	public void deleteAnnotations(TSDBAnnotation request, StreamObserver<TSDBAnnotation> responseObserver) {
+//		annHandler.deleteAnnotations(request, responseObserver);
+//	}
+//
+//	/**
+//	 * {@inheritDoc}
+//	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#bulkDeleteAnnotations(net.opentsdb.grpc.BulkAnnotationRequest, io.grpc.stub.StreamObserver)
+//	 */
+//	@Override
+//	public void bulkDeleteAnnotations(BulkAnnotationRequest request,
+//			StreamObserver<BulkAnnotationResponse> responseObserver) {
+//		annHandler.bulkDeleteAnnotations(request, responseObserver);
+//	}
 
 	@Override
 	public void getConfiguration(Empty request, StreamObserver<KeyValues> responseObserver) {
@@ -219,6 +247,7 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 		responseObserver.onNext(Empty.getDefaultInstance());
 		responseObserver.onCompleted();
 	}
+	
 	
 
 	/**
@@ -276,16 +305,5 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 		return super.renameUids(responseObserver);
 	}
 
-	@Override
-	public void executeQuery(Query request, StreamObserver<QueryResponse> responseObserver) {
-		// TODO Auto-generated method stub
-		super.executeQuery(request, responseObserver);
-	}
-
-	@Override
-	public void executeQueries(Query request, StreamObserver<SubQueryResponse> responseObserver) {
-		// TODO Auto-generated method stub
-		super.executeQueries(request, responseObserver);
-	}
 
 }

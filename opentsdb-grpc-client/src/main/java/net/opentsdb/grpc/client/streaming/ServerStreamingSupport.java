@@ -81,7 +81,7 @@ Received Rst Stream
 					while(rs.isReady()) {
 						T t = inQueue.poll();
 						if(t!=null) {
-							int inCount = subItemsIn.apply(t);
+							long inCount = subItemsIn.apply(t);
 							rs.onNext(t);
 							rs.request(1);
 							requestsSent.add(inCount);
@@ -115,7 +115,7 @@ Received Rst Stream
 				completion.countDown();
 				
 			} else {
-				int outCount = subItemsOut.apply(r);
+				long outCount = subItemsOut.apply(r);
 				responsesReceived.add(outCount);
 				if(inFlight.addAndGet(-outCount)==0) {
 					if(clientClosed.get()) {
@@ -133,7 +133,7 @@ Received Rst Stream
 	protected class NonFinalProvidingStreamObserver extends BaseStreamObserver {
 		@Override
 		protected void handleNext(R r) {
-			int outCount = subItemsOut.apply(r);
+			long outCount = subItemsOut.apply(r);
 			responsesReceived.add(outCount);
 			long inf = inFlight.addAndGet(-outCount);
 			if(inf==0 && clientClosed.get()) {
