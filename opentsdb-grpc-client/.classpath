@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <classpath>
   <classpathentry kind="src" path="src/main/java" including="**/*.java"/>
+  <classpathentry kind="src" path="src/main/resources" excluding="**/*.java"/>
   <classpathentry kind="output" path="target/classes"/>
   <classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
   <classpathentry kind="var" path="M2_REPO/junit/junit/4.12/junit-4.12.jar" sourcepath="M2_REPO/junit/junit/4.12/junit-4.12-sources.jar">
@@ -44,19 +45,19 @@
     </attributes>
   </classpathentry>
   <classpathentry kind="src" path="/opentsdb-grpc-core"/>
-  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-netty/1.9.0/grpc-netty-1.9.0.jar" sourcepath="M2_REPO/io/grpc/grpc-netty/1.9.0/grpc-netty-1.9.0-sources.jar">
+  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-netty/1.10.0/grpc-netty-1.10.0.jar" sourcepath="M2_REPO/io/grpc/grpc-netty/1.10.0/grpc-netty-1.10.0-sources.jar">
     <attributes>
-      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-netty/1.9.0/grpc-netty-1.9.0-javadoc.jar!/" name="javadoc_location"/>
+      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-netty/1.10.0/grpc-netty-1.10.0-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
-  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-core/1.9.0/grpc-core-1.9.0.jar" sourcepath="M2_REPO/io/grpc/grpc-core/1.9.0/grpc-core-1.9.0-sources.jar">
+  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-core/1.10.0/grpc-core-1.10.0.jar" sourcepath="M2_REPO/io/grpc/grpc-core/1.10.0/grpc-core-1.10.0-sources.jar">
     <attributes>
-      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-core/1.9.0/grpc-core-1.9.0-javadoc.jar!/" name="javadoc_location"/>
+      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-core/1.10.0/grpc-core-1.10.0-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
-  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-context/1.9.0/grpc-context-1.9.0.jar" sourcepath="M2_REPO/io/grpc/grpc-context/1.9.0/grpc-context-1.9.0-sources.jar">
+  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-context/1.10.0/grpc-context-1.10.0.jar" sourcepath="M2_REPO/io/grpc/grpc-context/1.10.0/grpc-context-1.10.0-sources.jar">
     <attributes>
-      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-context/1.9.0/grpc-context-1.9.0-javadoc.jar!/" name="javadoc_location"/>
+      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-context/1.10.0/grpc-context-1.10.0-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
   <classpathentry kind="var" path="M2_REPO/com/google/guava/guava/19.0/guava-19.0.jar" sourcepath="M2_REPO/com/google/guava/guava/19.0/guava-19.0-sources.jar">
@@ -74,19 +75,14 @@
       <attribute value="jar:file:/home/nwhitehead/.m2/repository/com/google/code/findbugs/jsr305/3.0.0/jsr305-3.0.0-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
-  <classpathentry kind="var" path="M2_REPO/com/google/instrumentation/instrumentation-api/0.4.3/instrumentation-api-0.4.3.jar" sourcepath="M2_REPO/com/google/instrumentation/instrumentation-api/0.4.3/instrumentation-api-0.4.3-sources.jar">
+  <classpathentry kind="var" path="M2_REPO/io/opencensus/opencensus-api/0.11.0/opencensus-api-0.11.0.jar" sourcepath="M2_REPO/io/opencensus/opencensus-api/0.11.0/opencensus-api-0.11.0-sources.jar">
     <attributes>
-      <attribute value="jar:file:/home/nwhitehead/.m2/repository/com/google/instrumentation/instrumentation-api/0.4.3/instrumentation-api-0.4.3-javadoc.jar!/" name="javadoc_location"/>
+      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/opencensus/opencensus-api/0.11.0/opencensus-api-0.11.0-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
-  <classpathentry kind="var" path="M2_REPO/io/opencensus/opencensus-api/0.10.0/opencensus-api-0.10.0.jar" sourcepath="M2_REPO/io/opencensus/opencensus-api/0.10.0/opencensus-api-0.10.0-sources.jar">
+  <classpathentry kind="var" path="M2_REPO/io/opencensus/opencensus-contrib-grpc-metrics/0.11.0/opencensus-contrib-grpc-metrics-0.11.0.jar" sourcepath="M2_REPO/io/opencensus/opencensus-contrib-grpc-metrics/0.11.0/opencensus-contrib-grpc-metrics-0.11.0-sources.jar">
     <attributes>
-      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/opencensus/opencensus-api/0.10.0/opencensus-api-0.10.0-javadoc.jar!/" name="javadoc_location"/>
-    </attributes>
-  </classpathentry>
-  <classpathentry kind="var" path="M2_REPO/io/opencensus/opencensus-contrib-grpc-metrics/0.10.0/opencensus-contrib-grpc-metrics-0.10.0.jar" sourcepath="M2_REPO/io/opencensus/opencensus-contrib-grpc-metrics/0.10.0/opencensus-contrib-grpc-metrics-0.10.0-sources.jar">
-    <attributes>
-      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/opencensus/opencensus-contrib-grpc-metrics/0.10.0/opencensus-contrib-grpc-metrics-0.10.0-javadoc.jar!/" name="javadoc_location"/>
+      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/opencensus/opencensus-contrib-grpc-metrics/0.11.0/opencensus-contrib-grpc-metrics-0.11.0-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
   <classpathentry kind="var" path="M2_REPO/io/netty/netty-codec-http2/4.1.17.Final/netty-codec-http2-4.1.17.Final.jar" sourcepath="M2_REPO/io/netty/netty-codec-http2/4.1.17.Final/netty-codec-http2-4.1.17.Final-sources.jar">
@@ -139,9 +135,9 @@
       <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/netty/netty-codec-socks/4.1.17.Final/netty-codec-socks-4.1.17.Final-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
-  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-protobuf/1.9.0/grpc-protobuf-1.9.0.jar" sourcepath="M2_REPO/io/grpc/grpc-protobuf/1.9.0/grpc-protobuf-1.9.0-sources.jar">
+  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-protobuf/1.10.0/grpc-protobuf-1.10.0.jar" sourcepath="M2_REPO/io/grpc/grpc-protobuf/1.10.0/grpc-protobuf-1.10.0-sources.jar">
     <attributes>
-      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-protobuf/1.9.0/grpc-protobuf-1.9.0-javadoc.jar!/" name="javadoc_location"/>
+      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-protobuf/1.10.0/grpc-protobuf-1.10.0-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
   <classpathentry kind="var" path="M2_REPO/com/google/protobuf/protobuf-java/3.5.1/protobuf-java-3.5.1.jar" sourcepath="M2_REPO/com/google/protobuf/protobuf-java/3.5.1/protobuf-java-3.5.1-sources.jar">
@@ -159,19 +155,24 @@
       <attribute value="jar:file:/home/nwhitehead/.m2/repository/com/google/api/grpc/proto-google-common-protos/1.0.0/proto-google-common-protos-1.0.0-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
-  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-protobuf-lite/1.9.0/grpc-protobuf-lite-1.9.0.jar" sourcepath="M2_REPO/io/grpc/grpc-protobuf-lite/1.9.0/grpc-protobuf-lite-1.9.0-sources.jar">
+  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-protobuf-lite/1.10.0/grpc-protobuf-lite-1.10.0.jar" sourcepath="M2_REPO/io/grpc/grpc-protobuf-lite/1.10.0/grpc-protobuf-lite-1.10.0-sources.jar">
     <attributes>
-      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-protobuf-lite/1.9.0/grpc-protobuf-lite-1.9.0-javadoc.jar!/" name="javadoc_location"/>
+      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-protobuf-lite/1.10.0/grpc-protobuf-lite-1.10.0-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
-  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-stub/1.9.0/grpc-stub-1.9.0.jar" sourcepath="M2_REPO/io/grpc/grpc-stub/1.9.0/grpc-stub-1.9.0-sources.jar">
+  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-stub/1.10.0/grpc-stub-1.10.0.jar" sourcepath="M2_REPO/io/grpc/grpc-stub/1.10.0/grpc-stub-1.10.0-sources.jar">
     <attributes>
-      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-stub/1.9.0/grpc-stub-1.9.0-javadoc.jar!/" name="javadoc_location"/>
+      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-stub/1.10.0/grpc-stub-1.10.0-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
-  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-services/1.9.0/grpc-services-1.9.0.jar" sourcepath="M2_REPO/io/grpc/grpc-services/1.9.0/grpc-services-1.9.0-sources.jar">
+  <classpathentry kind="var" path="M2_REPO/io/grpc/grpc-services/1.10.0/grpc-services-1.10.0.jar" sourcepath="M2_REPO/io/grpc/grpc-services/1.10.0/grpc-services-1.10.0-sources.jar">
     <attributes>
-      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-services/1.9.0/grpc-services-1.9.0-javadoc.jar!/" name="javadoc_location"/>
+      <attribute value="jar:file:/home/nwhitehead/.m2/repository/io/grpc/grpc-services/1.10.0/grpc-services-1.10.0-javadoc.jar!/" name="javadoc_location"/>
+    </attributes>
+  </classpathentry>
+  <classpathentry kind="var" path="M2_REPO/com/google/instrumentation/instrumentation-api/0.4.3/instrumentation-api-0.4.3.jar" sourcepath="M2_REPO/com/google/instrumentation/instrumentation-api/0.4.3/instrumentation-api-0.4.3-sources.jar">
+    <attributes>
+      <attribute value="jar:file:/home/nwhitehead/.m2/repository/com/google/instrumentation/instrumentation-api/0.4.3/instrumentation-api-0.4.3-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
   <classpathentry kind="src" path="/opentsdb-plugin-common"/>
@@ -191,6 +192,17 @@
       <attribute value="jar:file:/home/nwhitehead/.m2/repository/org/jctools/jctools-core/2.1.1/jctools-core-2.1.1-javadoc.jar!/" name="javadoc_location"/>
     </attributes>
   </classpathentry>
+  <classpathentry kind="var" path="M2_REPO/org/helios/helios-native/helios-native-sigar/1.0-SNAPSHOT/helios-native-sigar-1.0-SNAPSHOT.jar"/>
+  <classpathentry kind="var" path="M2_REPO/org/helios/helios-jmx/1.0-SNAPSHOT/helios-jmx-1.0-SNAPSHOT.jar"/>
+  <classpathentry kind="var" path="M2_REPO/log4j/log4j/1.2.16/log4j-1.2.16.jar" sourcepath="M2_REPO/log4j/log4j/1.2.16/log4j-1.2.16-sources.jar">
+    <attributes>
+      <attribute value="jar:file:/home/nwhitehead/.m2/repository/log4j/log4j/1.2.16/log4j-1.2.16-javadoc.jar!/" name="javadoc_location"/>
+    </attributes>
+  </classpathentry>
+  <classpathentry kind="var" path="M2_REPO/trove/trove/3.0.0/trove-3.0.0.jar"/>
+  <classpathentry kind="var" path="M2_REPO/javassist/javassist/3.11.0.GA/javassist-3.11.0.GA.jar" sourcepath="M2_REPO/javassist/javassist/3.11.0.GA/javassist-3.11.0.GA-sources.jar"/>
+  <classpathentry kind="var" path="M2_REPO/org/helios/helios-util/1.0-SNAPSHOT/helios-util-1.0-SNAPSHOT.jar"/>
+  <classpathentry kind="var" path="M2_REPO/org/hyperic/sigar/1.6.4/sigar-1.6.4.jar"/>
   <classpathentry kind="var" path="M2_REPO/org/slf4j/slf4j-api/1.7.7/slf4j-api-1.7.7.jar" sourcepath="M2_REPO/org/slf4j/slf4j-api/1.7.7/slf4j-api-1.7.7-sources.jar">
     <attributes>
       <attribute value="jar:file:/home/nwhitehead/.m2/repository/org/slf4j/slf4j-api/1.7.7/slf4j-api-1.7.7-javadoc.jar!/" name="javadoc_location"/>

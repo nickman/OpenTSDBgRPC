@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 // This file is part of OpenTSDB.
 // Copyright (C) 2010-2012  The OpenTSDB Authors.
 //
@@ -19,31 +18,24 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-=======
-/**
- * 
- */
-package net.opentsdb.grpc.client;
-
->>>>>>> aa8c9188fbcb6ed2d97d631a95413680931e3a4d
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.grpc.CallOptions;
-<<<<<<< HEAD
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
 import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
+import io.grpc.MethodDescriptor;
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.grpc.AggregatorNames;
 import net.opentsdb.grpc.CreateAnnotationResponse;
-import net.opentsdb.grpc.DataPoint;
 import net.opentsdb.grpc.Empty;
-import net.opentsdb.grpc.MetricTags;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceBlockingStub;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceStub;
@@ -74,25 +66,7 @@ public class OpenTSDBClient implements Closeable {
 	protected OpenTSDBServiceStub stub;
 	protected OpenTSDBServiceBlockingStub blockingStub = null;
 	protected final AtomicReference<ConnectivityState> connState = new AtomicReference<>(ConnectivityState.IDLE); 
-=======
-import io.grpc.Channel;
-import io.grpc.ClientCall;
-import io.grpc.ClientInterceptor;
-import io.grpc.MethodDescriptor;
 
-/**
- * @author nwhitehead
- *
- */
-public class OpenTSDBClient {
-	protected static final Logger LOG = LoggerFactory.getLogger(OpenTSDBClient.class);
->>>>>>> aa8c9188fbcb6ed2d97d631a95413680931e3a4d
-	
-	
-	
-	
-	
-<<<<<<< HEAD
 
 	/**
 	 * Creates a new OpenTSDBClient using all default configuration
@@ -376,7 +350,6 @@ public class OpenTSDBClient {
 		
 	}
 
-=======
 	
 	
 	protected class OpenTSDBClientInterceptor implements ClientInterceptor {
@@ -394,5 +367,4 @@ public class OpenTSDBClient {
 		
 	}
 	
->>>>>>> aa8c9188fbcb6ed2d97d631a95413680931e3a4d
 }
