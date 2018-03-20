@@ -9,18 +9,28 @@ import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.ByteString;
+import com.stumbleupon.async.Deferred;
 
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.core.Aggregators;
+import net.opentsdb.core.DataPoint;
 import net.opentsdb.core.Query;
+import net.opentsdb.core.SeekableView;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.AggregatorName;
 import net.opentsdb.grpc.AggregatorNames;
@@ -29,22 +39,28 @@ import net.opentsdb.grpc.Content;
 import net.opentsdb.grpc.ContentName;
 import net.opentsdb.grpc.Count;
 import net.opentsdb.grpc.CreateAnnotationResponse;
+import net.opentsdb.grpc.DPoint;
 import net.opentsdb.grpc.DataPointQuery;
-import net.opentsdb.grpc.DataPoints;
 import net.opentsdb.grpc.Empty;
 import net.opentsdb.grpc.FilterMeta;
 import net.opentsdb.grpc.FilterMetas;
 import net.opentsdb.grpc.KeyValues;
+import net.opentsdb.grpc.MetricTags;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase;
 import net.opentsdb.grpc.Ping;
 import net.opentsdb.grpc.Pong;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
+import net.opentsdb.grpc.QueryResponse;
 import net.opentsdb.grpc.Reassignment;
+import net.opentsdb.grpc.TSDBAnnotation;
 import net.opentsdb.grpc.TSDBAnnotations;
+import net.opentsdb.grpc.Tsuid;
+import net.opentsdb.grpc.Tsuids;
 import net.opentsdb.grpc.Uid;
 import net.opentsdb.grpc.server.handlers.AnnotationStreamHandler;
 import net.opentsdb.grpc.server.handlers.DataPointStreamHandler;
+import net.opentsdb.meta.Annotation;
 import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.query.filter.TagVFilter;
 import net.opentsdb.stats.StatsCollector;
@@ -151,22 +167,116 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 		responseObserver.onCompleted();
 	}
 	
-
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#executeQuery(net.opentsdb.grpc.DataPointQuery, io.grpc.stub.StreamObserver)
+	 */
 	@Override
-	public void executeQuery(DataPointQuery request, StreamObserver<DataPoints> responseObserver) {
+	public void executeQuery(DataPointQuery request, StreamObserver<QueryResponse> responseObserver) {
+		LOG.info("Executing Query: {}", request);
 		final Query q = ProtoConverters.from(request, tsdb.newQuery());
-		SuAsyncHelpers.singleTBoth(q.runAsync(), (dps, err) -> {
-			
+		List<Deferred<Void>> allDefs = Collections.synchronizedList(new ArrayList<>());
+		allDefs.add(SuAsyncHelpers.singleTBoth(q.runAsync(), (dps, err) -> { 
+			if(err != null) {
+				LOG.error("Query Execution Error: {}", request, err);
+				responseObserver.onError(new Exception(err.getMessage()));
+				responseObserver.onCompleted();
+			} else {
+				LOG.info("Processing Internal Responses: {}", dps.length);
+				final AtomicInteger cnt =  new AtomicInteger();
+				Arrays.stream(dps).forEach(dp -> {					
+					final int idx =  cnt.incrementAndGet();
+					final QueryResponse.Builder builder = QueryResponse.newBuilder();
+					
+					List<Annotation> annots = dp.getAnnotations();
+					if(annots != null && !annots.isEmpty()) {
+						List<TSDBAnnotation> anns = annots.stream()
+							.map(a -> ProtoConverters.from(a))
+							.collect(Collectors.toList());
+						builder.setAnnotations(TSDBAnnotations.newBuilder().addAllAnnotations(anns).build());						
+					}				
+					
+					builder.setQueryIndex(dp.getQueryIndex());										
+					builder.setTsuids(Tsuids.newBuilder().addAllTsuids(
+							dp.getTSUIDs().stream()
+								.map(s -> Tsuid.newBuilder().setTsuidName(s).build())
+								.collect(Collectors.toList())
+					).build());
+					try {
+						SeekableView view = dp.iterator();
+						while(view.hasNext()) {
+							DataPoint d = view.next();
+							builder.addDataPoints(DPoint.newBuilder().setValue(d.toDouble()).setTimestamp(d.timestamp()).build());
+						}
+					} catch (Exception ex) {
+						ex.printStackTrace(System.err);
+					}
+					
+					final AtomicReference<Map<String, String>> tags = new AtomicReference<>(null);
+					final AtomicReference<List<String>> atags = new AtomicReference<>(null);
+					final AtomicReference<String> metric = new AtomicReference<>(null);
+					
+					allDefs.add(SuAsyncHelpers.group((o, t) -> {
+						if(t != null) {
+							LOG.error("Failed to get async query values", t);
+							responseObserver.onError(new Exception(t.getMessage()));
+							responseObserver.onCompleted();
+						} else {
+							builder.setTags(MetricTags.newBuilder().putAllTags(tags.get()));
+							builder.setMetric(metric.get());
+							builder.addAllAggregatedTags(atags.get());
+							
+							try {
+								responseObserver.onNext(builder.build());
+								LOG.info("Sent Query Response: qindex={}, dp={}, size={}, aggsize={}", dp.getQueryIndex(), idx, dp.size(), dp.aggregatedSize());
+							} catch (Exception ex) {
+								LOG.error("Failed to send dp", ex);
+								responseObserver.onError(new Exception(ex.getMessage()));
+								responseObserver.onCompleted();
+								
+							}
+						}
+					},
+							dp.getTagsAsync().addCallback((t) -> {
+								tags.set(t); return null;
+							}),
+							dp.metricNameAsync().addCallback((s) -> { 
+								metric.set(s); return null;
+							}),
+							dp.getAggregatedTagsAsync().addCallback((s) -> { 
+								atags.set(s); return null;
+							})
+					));
+				});
+			}
+		}));
+		SuAsyncHelpers.singleTBoth(Deferred.group(allDefs), (v,t) -> {
+			if(t!=null) {
+				LOG.error("Failed on group all defs", t);
+				responseObserver.onError(new Exception(t.getMessage()));
+				responseObserver.onCompleted();
+			} else {
+				responseObserver.onCompleted();
+			}
 		});
 		
 	}
-//	/**
-//	 * {@inheritDoc}
-//	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#getAnnotation(net.opentsdb.grpc.AnnotationRequest, io.grpc.stub.StreamObserver)
-//	 */
-//	@Override
-//	public void getAnnotation(AnnotationRequest request, StreamObserver<TSDBAnnotation> responseObserver) {
-//		annHandler.getAnnotation(request, responseObserver);
+	
+	
+	
+//	message DPoint {
+//		double value = 1;
+//		int64 timestamp = 2;
+//	}
+//
+//	message QueryResponse {  // Represents a net.opentsdb.core.DataPoints[]
+//		repeated string aggregatedTags = 1;
+//		TSDBAnnotations annotations = 2;
+//		int32 queryIndex = 3;
+//		string metric = 4;
+//		MetricTags tags = 5;
+//		Tsuids tsuids = 6;
+//		repeated DPoint dataPoints = 7;
 //	}
 
 	/**

@@ -22,11 +22,13 @@ import com.google.protobuf.ByteString;
 
 import net.opentsdb.core.Aggregator;
 import net.opentsdb.core.Aggregators;
+import net.opentsdb.core.FillPolicy;
 import net.opentsdb.core.Query;
 import net.opentsdb.grpc.DataPoint;
 import net.opentsdb.grpc.DataPointQuery;
 import net.opentsdb.grpc.DataPoints;
 import net.opentsdb.grpc.DateTime;
+import net.opentsdb.grpc.Downsample;
 import net.opentsdb.grpc.MetricAndTags;
 import net.opentsdb.grpc.MetricTags;
 import net.opentsdb.grpc.RateOptions;
@@ -114,6 +116,14 @@ public class ProtoConverters {
 		}
 	}
 	
+	public static long toAbs(RelativeTime rt) {
+		if("now".equalsIgnoreCase(rt.getUnit())) {
+			return System.currentTimeMillis();
+		}
+		long ms = RelTime.from(rt.getTime() + rt.getUnit()).convertTo(TimeUnit.MILLISECONDS);
+		return System.currentTimeMillis() - ms;
+	}
+	
 	
 	public static Aggregator from(net.opentsdb.grpc.Aggregator aggr) {
 		return Aggregators.get(aggr.name().toLowerCase());
@@ -153,7 +163,23 @@ public class ProtoConverters {
 		
 		RateOptions rateOptions = dpq.getRateOptions();
 		
-		if(tsuids != null) {
+		Downsample ds = dpq.getDownSample();
+		
+		if(ds!=null && ds.isInitialized() && ds.getRelTime().getTime() != 0) {
+			long ts = toAbs(ds.getRelTime());
+			if(ts!=0) {
+				FillPolicy fp = null;
+				if(ds.getFillPolicy()!=null) {
+					fp = FillPolicy.fromString(ds.getFillPolicy().name().toLowerCase());
+					q.downsample(ts, from(ds.getAggregator()), fp);
+				} else {
+					q.downsample(ts, from(ds.getAggregator()));
+				}
+			}
+		}
+		
+		
+		if(tsuids != null && tsuids.getTsuidsCount() > 0) {
 			if(rateOptions != null) {
 				q.setTimeSeries(tsuidsToStrings(tsuids), from(agg), rate, from(rateOptions));
 			} else {

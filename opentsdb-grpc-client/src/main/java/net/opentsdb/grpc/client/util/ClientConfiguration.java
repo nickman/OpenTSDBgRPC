@@ -17,10 +17,8 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
 
+import io.grpc.ClientInterceptor;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.internal.GrpcUtil;
@@ -29,12 +27,6 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.epoll.Epoll;
-import io.netty.channel.epoll.EpollChannelOption;
-import io.netty.channel.epoll.EpollEventLoopGroup;
-import io.netty.channel.epoll.EpollMode;
-import io.netty.channel.epoll.EpollSocketChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioSocketChannel;
 import net.opentsdb.grpc.client.envoy.EnvoyFinder;
 import net.opentsdb.plugin.common.util.RelTime;
 import net.opentsdb.plugin.common.util.TUnit;
@@ -266,9 +258,12 @@ public class ClientConfiguration {
 		
 	}
 	
-	public ManagedChannel build() {
-		return builder.build();
+	public ManagedChannel build(ClientInterceptor...interceptors) {
+		return builder.intercept(interceptors).build();
 	}
+	
+	
+	
 	
 	
 	/**

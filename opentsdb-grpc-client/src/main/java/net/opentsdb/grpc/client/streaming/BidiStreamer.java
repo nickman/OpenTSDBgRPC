@@ -12,6 +12,8 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.grpc.client.streaming;
 
+import java.util.function.BiConsumer;
+
 /**
  * <p>Title: BidiStreamer</p>
  * <p>Description: Encapsulates a generic bidirectional client call</p> 
@@ -32,6 +34,12 @@ public class BidiStreamer<T, R> extends ServerStreamingSupport<T,R> {
 		LOG.info("BidiStreamer Started: {}", md.getFullMethodName());
 		return this;
 	}
+	
+	public BidiStreamer<T,R> onErrorAction(BiConsumer<Throwable, Streamer<T,R>> onErrorAction) {
+		this.onErrorAction = onErrorAction;
+		return this;
+	}
+
 	
 	public boolean send(T t) {
 		if(clientClosed.get()) {

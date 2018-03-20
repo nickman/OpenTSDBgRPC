@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -92,6 +93,8 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R>, Closeabl
 	protected final Function<T, Long> subItemsIn;
 	protected final Function<R, Long> subItemsOut;
 	protected final Function<R, Boolean> finalResponse;
+	
+	protected BiConsumer<Throwable, Streamer<T,R>> onErrorAction = (t, s) -> {};
 	
 	
 	protected final CountDownLatch completion = new CountDownLatch(1);
@@ -349,6 +352,15 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R>, Closeabl
 	
 	public boolean isExpectsFinalResponse() {
 		return expectsFinalResponse;
+	}
+
+	/**
+	 * @param onErrorAction the onErrorAction to set
+	 * @return 
+	 */
+	public AbstractStreamer<T,R> onErrorAction(BiConsumer<Throwable, Streamer<T,R>> onErrorAction) {
+		this.onErrorAction = onErrorAction;
+		return this;
 	}
 
 

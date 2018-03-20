@@ -49,7 +49,8 @@ public abstract class ServerStreamingSupport<T, R> extends AbstractStreamer<T, R
 		
 		@Override
 		public void onError(Throwable t) {
-			LOG.error("Response Observer: Stream error", t);
+//			LOG.error("Response Observer: Stream error", t);
+			onErrorAction.accept(t, ServerStreamingSupport.this);
 			completion.countDown();			
 		}
 		

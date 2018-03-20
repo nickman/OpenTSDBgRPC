@@ -12,6 +12,9 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.grpc.server;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -71,8 +74,17 @@ public class SuAsyncHelpers {
 		);
 	}
 	
-	public static <T> void singleTBoth(Deferred<T> def, BiConsumer<T, Throwable> cb) {
-		def.addCallbacks(
+	@SafeVarargs
+	public static Deferred<Void> group(BiConsumer<Object, Throwable> completion, Deferred<Object>...ds) {
+		final List<Deferred<Object>> defs = new ArrayList<>();
+		Collections.addAll(defs, ds);
+		return singleTBoth(Deferred.group(defs), (o,t) -> {
+			completion.accept(o, t);
+		});
+	}
+	
+	public static <T> Deferred<Void> singleTBoth(Deferred<T> def, BiConsumer<T, Throwable> cb) {
+		return def.addCallbacks(
 				new Callback<Void, T>() {
 					@Override
 					public Void call(T t) throws Exception {

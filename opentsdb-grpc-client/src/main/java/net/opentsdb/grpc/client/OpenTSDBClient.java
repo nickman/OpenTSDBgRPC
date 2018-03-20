@@ -18,6 +18,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -33,9 +35,15 @@ import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import io.grpc.MethodDescriptor;
 import io.grpc.stub.StreamObserver;
+import net.opentsdb.grpc.Aggregator;
 import net.opentsdb.grpc.AggregatorNames;
 import net.opentsdb.grpc.CreateAnnotationResponse;
+import net.opentsdb.grpc.DataPointQuery;
+import net.opentsdb.grpc.DateTime;
+import net.opentsdb.grpc.Downsample;
 import net.opentsdb.grpc.Empty;
+import net.opentsdb.grpc.MetricAndTags;
+import net.opentsdb.grpc.MetricTags;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceBlockingStub;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceStub;
@@ -43,7 +51,8 @@ import net.opentsdb.grpc.Ping;
 import net.opentsdb.grpc.Pong;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
-import net.opentsdb.grpc.TSDBAnnotation;
+import net.opentsdb.grpc.QueryResponse;
+import net.opentsdb.grpc.RelativeTime;
 import net.opentsdb.grpc.TSDBAnnotations;
 import net.opentsdb.grpc.client.streaming.BidiStreamer;
 import net.opentsdb.grpc.client.streaming.StreamerBuilder;
@@ -212,6 +221,14 @@ public class OpenTSDBClient implements Closeable {
 		}
 	}
 	
+	public boolean isConnected() {
+		return connState.get()==ConnectivityState.READY;
+	}
+	
+	public ConnectivityState connectivityState() {
+		return connState.get();
+	}
+	
 	protected void check() {
 		if(!open.get()) {
 			throw new IllegalStateException("OpenTSDBClient is not connected");
@@ -265,7 +282,9 @@ public class OpenTSDBClient implements Closeable {
 	}	
 	
 	public BidiStreamer<PutDatapoints,PutDatapointsResponse> putDatapoints(Consumer<PutDatapointsResponse> outConsumer) {
-		return putDatapoints(CallOptions.DEFAULT, outConsumer);
+		return putDatapoints(CallOptions.DEFAULT, outConsumer).onErrorAction((t,s) -> {
+			LOG.error("BidiStreamer Error. Connectivity: {}", channel.getState(false), t);
+		});
 	}
 
 	public BidiStreamer<PutDatapoints,PutDatapointsResponse> putDatapoints(CallOptions callOptions, Consumer<PutDatapointsResponse> outConsumer) {
@@ -290,38 +309,92 @@ public class OpenTSDBClient implements Closeable {
 				.buildBidiStreamer();
 	}
 	
+	//public void executeQuery(DataPointQuery request, StreamObserver<QueryResponse> responseObserver) {
+	
+	public void executeQuery(DataPointQuery request, StreamObserver<QueryResponse> responseObserver) {
+		stub.executeQuery(request, responseObserver);
+	}
+	
 
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
 		
-		OpenTSDBClient client = OpenTSDBClient.newInstance("192.168.1.182", 10000).open();
+		OpenTSDBClient client = OpenTSDBClient.newInstance("localhost", 10000).open();
 		final Logger log = client.LOG;
 		log.info("Created OpenTSDBClient: {}", client);
-		try (BidiStreamer<TSDBAnnotations,CreateAnnotationResponse> streamer = client.createAnnotations(pdr -> {
-			log.info("RESPONSE: {}", pdr);
-		}).start()) {
-			Map<String, String> tags = new HashMap<>();
-			tags.put("foo", "bar");
-			TSDBAnnotations.Builder builder = TSDBAnnotations.newBuilder().setDetails(true);
-			for(int i = 0; i < 3; i++) {
-				TSDBAnnotation t = TSDBAnnotation.newBuilder()
-					.setDescription("Hello World Description #" + i)
-//					.setEndTime(System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1) + i)
-					.setStartTime(System.currentTimeMillis() + i)
-					.setNotes("These are my notes #" + i)
-					.putAllCustom(tags)
-					.build();
-				builder.addAnnotations(t);
+		Map<String, String> tags = new HashMap<>();
+//		tags.put("cpu", "0");
+//		tags.put("type", "combined");
+		final CountDownLatch latch = new CountDownLatch(1);
+		DataPointQuery dpq = DataPointQuery.newBuilder()
+			.setDownSample(Downsample.newBuilder().setAggregator(Aggregator.MAX).setRelTime(RelativeTime.newBuilder().setTime(1).setUnit("m").build()).build())
+			.setAggregator(Aggregator.AVG)
+			.setStartTime(DateTime.newBuilder().setRelTime(RelativeTime.newBuilder().setTime(1).setUnit("h").build()).build())
+			.setEndTime(DateTime.newBuilder().setRelTime(RelativeTime.newBuilder().setTime(1).setUnit("m").build()).build())
+			.setMetricAndTags(MetricAndTags.newBuilder()
+				.setMetric("sys.net.iface")
+				.setTags(MetricTags.newBuilder().putAllTags(tags).build())
+				.build()
+			)
+			.build();
+		final long start = System.currentTimeMillis();
+		client.executeQuery(dpq, new StreamObserver<QueryResponse>() {
+
+			@Override
+			public void onNext(QueryResponse r) {
+				log.info("Retrieved {} datapoints in {} ms.", r.getDataPointsCount(), System.currentTimeMillis() - start);
+				log.info("{}", r);
+				
 			}
-			streamer.send(builder.build());
-			log.info("Sent...");
-			streamer.clientComplete();
-			streamer.waitForCompletion();
-		} catch (Exception e) {
-			log.error("Stream failed", e);
+
+			@Override
+			public void onError(Throwable t) {
+				log.error("QueryExecution Error", t);
+				latch.countDown();
+			}
+
+			@Override
+			public void onCompleted() {
+				log.info("QueryExecution Complete");
+				latch.countDown();
+			}
+			
+		});
+		try {
+			if(!latch.await(1000000, TimeUnit.MILLISECONDS)) {
+				log.info("TIMEOUT");
+			} else {
+				log.info("OK");
+			}
+		} catch (Exception ex) {
+			log.error("Interrupted", ex);
 		}
+//		try (BidiStreamer<TSDBAnnotations,CreateAnnotationResponse> streamer = client.createAnnotations(pdr -> {
+//			log.info("RESPONSE: {}", pdr);
+//		}).start()) {
+//			tags = new HashMap<>();
+//			tags.put("foo", "bar");
+//			TSDBAnnotations.Builder builder = TSDBAnnotations.newBuilder().setDetails(true);
+//			for(int i = 0; i < 3; i++) {
+//				TSDBAnnotation t = TSDBAnnotation.newBuilder()
+//					.setDescription("Hello World Description #" + i)
+//					.setTsuid(Tsuid.newBuilder().setTsuidName("00049600000100001900000400001A00000900002600000A00001C").build())
+////					.setEndTime(System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1) + i)
+//					.setStartTime(System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(5))
+//					.setNotes("These are my notes #" + i)
+//					.putAllCustom(tags)
+//					.build();
+//				builder.addAnnotations(t);
+//			}
+//			streamer.send(builder.build());
+//			log.info("Sent...");
+//			streamer.clientComplete();
+//			streamer.waitForCompletion();
+//		} catch (Exception e) {
+//			log.error("Stream failed", e);
+//		}
 //		try (BidiStreamer<PutDatapoints,PutDatapointsResponse> streamer = client.putDatapoints(pdr -> {
 //			log.info("RESPONSE: {}", pdr);
 //		}).start()) {			

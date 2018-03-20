@@ -32,7 +32,7 @@ service OpenTSDBService {
 	rpc RenameUid(Reassignment) returns (Empty) {}
 	rpc RenameUids(stream Reassignment) returns (stream Count) {}
 	
-	rpc ExecuteQuery(DataPointQuery) returns (stream DataPoints) {}
+	rpc ExecuteQuery(DataPointQuery) returns (stream QueryResponse) {}
 	
 /*	
 	rpc ExecuteQuery(Query) returns (QueryResponse) {}
@@ -226,11 +226,6 @@ message PutDatapointsResponse {
 	repeated PutDatapointError errors = 4;
 }
 
-message DPoint {
-	double value = 1;
-	int64 timestamp = 2;
-}
-
 
 
 enum Aggregator {
@@ -274,6 +269,7 @@ enum FillPolicy {
 	NAN = 1;
 	NULL = 2;
 	zero = 3;
+	scalar = 4;
 }
 
 enum UidType {
@@ -419,6 +415,11 @@ message SubQuery {
 	Percentiles percentiles = 7;		
 }
 
+message DPoint {
+	double value = 1;
+	int64 timestamp = 2;
+}
+
 message QueryResponse {  // Represents a net.opentsdb.core.DataPoints[]
 	repeated string aggregatedTags = 1;
 	TSDBAnnotations annotations = 2;
@@ -427,6 +428,7 @@ message QueryResponse {  // Represents a net.opentsdb.core.DataPoints[]
 	MetricTags tags = 5;
 	Tsuids tsuids = 6;
 	repeated DPoint dataPoints = 7;
+	int32 totalDataPoints = 8;
 }
 
 

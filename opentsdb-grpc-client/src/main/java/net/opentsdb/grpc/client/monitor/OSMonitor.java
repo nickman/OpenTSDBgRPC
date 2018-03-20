@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
@@ -61,24 +62,146 @@ public class OSMonitor {
 	protected final Logger LOG = LoggerFactory.getLogger(getClass());
 	protected final HeliosSigar sigar = HeliosSigar.getInstance();
 	protected final OpenTSDBClient client;
+	protected final AtomicBoolean connected = new AtomicBoolean(false);
+	protected final AtomicBoolean streamerOpen = new AtomicBoolean(false);
 	protected BidiStreamer<PutDatapoints,PutDatapointsResponse> streamer = null;
-	protected final DatapointBatcher batcher;
+	protected DatapointBatcher batcher;
 	protected final PushPopMap<String, String> tags = new PushPopMap<>();
 	protected final LongAdder pending = new LongAdder();
 	protected final Map<String, String> processQueries = new HashMap<>();
+	protected final String host;
+	protected final int port;
+
 	/**
 	 * Creates a new OSMonitor
+	 * @param host The grpc server host
+	 * @param port The grpc server port
 	 */
 	public OSMonitor(String host, int port) {
-		LOG.info("Starting OpenTSDBClient({}, {})", host, port);
-		client = OpenTSDBClient.newInstance(host, port).open();
-		streamer = client.putDatapoints(this::onResponse).start();
-		batcher = new DatapointBatcher(streamer);
+		this.host = host;
+		this.port = port;
+		LOG.info("OpenTSDBClient({}, {})", host, port);
+		client = OpenTSDBClient.newInstance(host, port);
 		LOG.info("Ready");
 		tags.push("host", ManagementFactory.getRuntimeMXBean().getName().split("@")[1])
 			.push("app", "os");
 		processQueries.put("java", "State.Name.ew=java");
 		processQueries.put("envoy", "State.Name.ew=envoy");
+		startConnect();
+	}
+	
+	protected void startConnect() {
+		if(!connected.get()) {
+			new Thread("OSMonitorConnectThread") {
+				public void run() {
+					while(!connected.get()) {
+						openClient();
+						if(!connected.get()) {
+							try { Thread.sleep(1000); } catch (Exception x) {}
+						}
+					}
+					LOG.info("OSMonitorConnectThread Finished");
+				}
+			}.start();
+		}
+	}
+	
+	protected void startStreamerConnect() {
+		LOG.info("Starting OSMonitorStreamerConnectThread");
+		new Thread("OSMonitorStreamerConnectThread") {
+			public void run() {
+				while(!streamerOpen.get()) {
+					startStreamer();
+					if(!streamerOpen.get()) {
+						try { Thread.sleep(1000); } catch (Exception x) {}
+					}
+				}
+				LOG.info("OSMonitorStreamerConnectThread Finished");
+			}
+		}.start();
+	}
+	
+	
+
+	protected void openClient() {
+		if(connected.compareAndSet(false, true)) {
+			try {
+				LOG.info("Opening Client...");
+				client.open();
+				LOG.info("Client opened");
+				startStreamer();
+			} catch (Exception ex) {
+				connected.set(false);
+			}
+		}
+	}
+	
+	protected void closeClient() {
+		if(connected.compareAndSet(true, false)) {
+			try {
+				LOG.info("Closing Client...");
+				stopStreamer();
+				try { client.close(); } catch (Exception x) {}
+				LOG.info("Client closed");				
+			} catch (Exception ex) {
+				
+			}
+		}
+	}
+	
+
+	
+	protected void startStreamer() {
+		if(connected.get() && streamerOpen.compareAndSet(false, true)) {
+			try {
+				LOG.info("Starting streamer...");
+				streamer = client.putDatapoints(this::onResponse).start();
+				streamer.onErrorAction((t,s) -> {
+					LOG.error("Streamer Error Callback: {}", t.toString());
+					stopStreamer();
+					if(!client.isConnected()) {
+						closeClient();
+						startConnect();
+					} else {						
+						startStreamer();
+						if(!streamerOpen.get()) {
+							stopStreamer();
+							startStreamerConnect();
+						}
+					}
+				});
+				batcher = new DatapointBatcher(streamer);
+				LOG.info("Streamer started");
+			} catch (Exception ex) {
+				streamerOpen.set(false);
+				streamer = null;
+				batcher = null;
+			}
+		}
+	}
+	
+	protected void stopStreamer() {
+		if(streamerOpen.compareAndSet(true, false)) {
+			LOG.info("Stopping streamer...");
+			try {
+				streamer.close();
+			} catch (Exception ex) {
+				LOG.warn("Error closing streamer: {}", ex);
+			} finally {
+				streamer = null;
+				batcher = null;
+				LOG.info("Streamer stopped");
+			}
+		}
+	}
+	
+	protected boolean ping() {
+		try {
+			client.ping();
+			return true;
+		} catch (Exception ex) {
+			return false;
+		}
 	}
 	
 	public void onResponse(PutDatapointsResponse response) {		
@@ -100,17 +223,19 @@ public class OSMonitor {
 			public void run() {
 				while(true) {
 					try {
-						os.collectCpu(flush);
-						os.collectFs(flush);
-						os.collectIfaces(flush);
-						os.collectNetstats(flush);
-						os.collectSystemMem(flush);
-						os.collectSwap(flush);
-						os.collectServerSockets(flush);
-						os.collectClientSockets(flush);
-						os.processQueries(flush);
-						if(!flush) {
-							os.flush();
+						if(os.streamerOpen.get()) {
+							os.collectCpu(flush);
+							os.collectFs(flush);
+							os.collectIfaces(flush);
+							os.collectNetstats(flush);
+							os.collectSystemMem(flush);
+							os.collectSwap(flush);
+							os.collectServerSockets(flush);
+							os.collectClientSockets(flush);
+							os.processQueries(flush);
+							if(!flush) {
+								os.flush();
+							}
 						}
 						Thread.sleep(5000);
 					} catch (Exception ex) {
