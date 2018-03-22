@@ -26,6 +26,7 @@ import net.opentsdb.grpc.OpenTSDBServiceGrpc;
 import net.opentsdb.grpc.PutDatapointError;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
+import net.opentsdb.grpc.TXTime;
 import net.opentsdb.grpc.server.SuAsyncHelpers;
 import net.opentsdb.grpc.server.streaming.server.StreamerBuilder;
 import net.opentsdb.grpc.server.streaming.server.StreamerContainer;
@@ -84,6 +85,7 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 	@Override
 	public CompletableFuture<PutDatapointsResponse> invoke(PutDatapoints putDatapoints, StreamerContext sc) {
 		final boolean details = putDatapoints.getDetails();
+		
 		CompletableFuture<PutDatapointsResponse> cf = new CompletableFuture<PutDatapointsResponse>();
 		final LongAdder _okDataPoints = sc.accProcessedItems();
 		final LongAdder _failedDataPoints = sc.accFailedItems();
@@ -182,7 +184,7 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 	 * @return the final PutDatapointsResponse
 	 */
 	protected PutDatapointsResponse response(long ok, long err, List<PutDatapointError> errors, boolean finalResponse) {
-		PutDatapointsResponse.Builder pdr = PutDatapointsResponse.newBuilder()
+		PutDatapointsResponse.Builder pdr = PutDatapointsResponse.newBuilder()				
 				.setFailed(err)
 				.setSuccess(ok)
 				.setFinalResponse(finalResponse);

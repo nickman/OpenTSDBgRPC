@@ -91,6 +91,12 @@ public class ClientConfiguration {
 	public static final String AVAILABLE_PROCESSORS = "io.netty.availableProcessors";
 	
 	public static final int ACTUAL_CORES = Runtime.getRuntime().availableProcessors();
+	
+	public static final String GRPC_MC_HEALTHCHECK_PERIOD = "grpc.mc.healthcheck.period";
+	public static final RelTime DEFAULT_GRPC_MC_HEALTHCHECK_PERIOD = new RelTime(TUnit.s, 5);
+	
+	public static final String GRPC_MC_SHUTDOWN_GRACE = "grpc.mc.shutdown.grace";
+	public static final RelTime DEFAULT_GRPC_MC_SHUTDOWN_GRACE = new RelTime(TUnit.s, 5);
 
 	
 	
@@ -110,6 +116,9 @@ public class ClientConfiguration {
 	private RelTime idleTimeout = null;
 	private RelTime keepAlive = null;
 	private RelTime keepAliveTimeout = null;
+	
+	private RelTime mcHealthCheckPeriod = null;
+	private RelTime mcShutdownGrace = null;
 	
 	private int maxInboundMessageSize = DEFAULT_GRPC_MAX_MESSAGE_SIZE;
 	private int flowControlWindow = DEFAULT_GRPC_FLOW_CONTROL;
@@ -210,6 +219,10 @@ public class ClientConfiguration {
 //		
 		userAgent = config(GRPC_USER_AGENT, DEFAULT_GRPC_USER_AGENT);
 		mcb.userAgent(userAgent);
+		
+		mcHealthCheckPeriod = config(GRPC_MC_HEALTHCHECK_PERIOD, DEFAULT_GRPC_MC_HEALTHCHECK_PERIOD);
+		mcShutdownGrace = config(GRPC_MC_SHUTDOWN_GRACE, DEFAULT_GRPC_MC_SHUTDOWN_GRACE);
+		
 //		
 //		epoll = isEpoll();
 //		channelType = epoll ? EpollSocketChannel.class : NioSocketChannel.class;
@@ -249,6 +262,7 @@ public class ClientConfiguration {
 		return mcb;
 	}
 	
+
 	public ManagedChannelBuilder<NettyChannelBuilder> configure(String host, int port) {
 		NettyChannelBuilder mcb = NettyChannelBuilder.forAddress(
 				config(GRPC_SERVER, DEFAULT_GRPC_SERVER), 
@@ -521,4 +535,12 @@ public class ClientConfiguration {
 		return port;
 	}
 
+	public RelTime getMcHealthCheckPeriod() {
+		return mcHealthCheckPeriod;
+	}
+
+	public RelTime getMcShutdownGrace() {
+		return mcShutdownGrace;
+	}
+	
 }

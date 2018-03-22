@@ -24,6 +24,7 @@ import java.util.Stack;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
 import java.util.stream.IntStream;
@@ -43,8 +44,19 @@ import org.hyperic.sigar.Tcp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientCall.Listener;
+import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.Metadata;
+import io.grpc.Metadata.Key;
+import io.grpc.MethodDescriptor;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
+import net.opentsdb.grpc.TXTime;
 import net.opentsdb.grpc.client.DatapointBatcher;
 import net.opentsdb.grpc.client.OpenTSDBClient;
 import net.opentsdb.grpc.client.streaming.BidiStreamer;
@@ -71,6 +83,11 @@ public class OSMonitor {
 	protected final Map<String, String> processQueries = new HashMap<>();
 	protected final String host;
 	protected final int port;
+	protected final AtomicReference<Metadata> headersCapture = new AtomicReference<>(); 
+	protected final AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
+	public static final String ENVOY_SVC_TIME =  "x-envoy-upstream-service-time";
+	public static  final Key<String> ENVOY_SVC_TIME_KEY =  Key.of(ENVOY_SVC_TIME, Metadata.ASCII_STRING_MARSHALLER);	
+
 
 	/**
 	 * Creates a new OSMonitor
@@ -88,6 +105,56 @@ public class OSMonitor {
 		processQueries.put("java", "State.Name.ew=java");
 		processQueries.put("envoy", "State.Name.ew=envoy");
 		startConnect();
+	}
+	
+	private final class MonitoredClientCallListener<RespT> extends SimpleForwardingClientCallListener<RespT> {
+
+		protected MonitoredClientCallListener(Listener<RespT> delegate) {
+			super(delegate);
+		}
+		
+		@Override
+		public void onHeaders(Metadata headers) {
+			String svcTime = headers.get(ENVOY_SVC_TIME_KEY);
+			if(svcTime != null) LOG.info("SVC_TIME: {}", svcTime);
+			super.onHeaders(headers);
+		}
+		
+		@Override
+		public void onMessage(RespT message) {
+			// TODO Auto-generated method stub
+			super.onMessage(message);
+		}
+		
+		
+		
+	}
+	
+	private class MonitoredClientCall<ReqT, RespT> extends SimpleForwardingClientCall<ReqT, RespT> {
+
+		protected MonitoredClientCall(ClientCall<ReqT, RespT> delegate) {
+			super(delegate);
+		}
+		
+		@Override
+		public void start(Listener<RespT> responseListener, Metadata headers) {
+			
+			super.start(new MonitoredClientCallListener<>(responseListener), headers);
+		}
+
+		
+		
+	}
+	
+	protected class Monitor implements ClientInterceptor {
+
+		@Override
+		public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
+				CallOptions callOptions, Channel next) {
+			LOG.info("Calling ----> {}", method.getFullMethodName());
+			return new MonitoredClientCall<>(next.newCall(method, callOptions));
+		}
+		
 	}
 	
 	protected void startConnect() {
@@ -127,7 +194,8 @@ public class OSMonitor {
 		if(connected.compareAndSet(false, true)) {
 			try {
 				LOG.info("Opening Client...");
-				client.open();
+				//client.open(MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture) );
+				client.open(new Monitor());
 				LOG.info("Client opened");
 				startStreamer();
 			} catch (Exception ex) {
@@ -204,20 +272,54 @@ public class OSMonitor {
 		}
 	}
 	
-	public void onResponse(PutDatapointsResponse response) {		
+	public void onResponse(PutDatapointsResponse response) {
+		long now = System.currentTimeMillis();
 		long total = response.getFailed() + response.getSuccess();
 		pending.add(-total);
-		LOG.info("Received Response. total={}, now-pending={}", total, pending.longValue());
+		TXTime tx = response.getTxTime();
+		if(tx != null && tx.getTxtime() != 0L) {
+			
+			long elapsed = now - tx.getTxtime();
+			long sendTime = tx.getStime();
+			long returnTime = now - tx.getRtime();
+			long processingTime = tx.getPtime();
+			
+			long variance = sendTime + returnTime + processingTime - elapsed;
+			
+			trace("grpc.putdatapoints", sendTime, Collections.singletonMap("phase", "send"));
+			trace("grpc.putdatapoints", returnTime, Collections.singletonMap("phase", "return"));
+			trace("grpc.putdatapoints", processingTime, Collections.singletonMap("phase", "process"));
+			trace("grpc.putdatapoints", elapsed, Collections.singletonMap("phase", "total"));
+			trace("grpc.putdatapoints", pending.longValue(), Collections.singletonMap("phase", "pending"));
+			
+			// total=1072, elapsed=931, send=930, return=1, proc=926, now-pending=0
+			
+			LOG.info("Received Response. count={}, elapsed={}, send={}, return={}, proc={}, pending={}, var={}", 
+					total, elapsed, sendTime, returnTime, processingTime, pending.longValue(), variance);
+		} else {
+			LOG.info("Received Response. count={}, now-pending={}", total, pending.longValue());
+		}
 		if(response.getFailed() > 0) {
 			System.err.println("Failed points: " + response.getFailed());
 		}
+	}
+	
+//	int64 txtime = 1;  // Inbound: send time, Outbound: same
+//	int64 stime = 2; 	// Outbound: send elapased
+//	int64 rtime = 3;  // Outbound: return elapsed
+//	int64 ptime = 4;	// Outbound: processing elapsed
+	
+	
+	private static double per(double time, double count) {
+		if(time==0D || count==0D) return 0D;
+		return time/count;
 	}
 
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		OSMonitor os = new OSMonitor("localhost", 10000);
+		OSMonitor os = new OSMonitor("localhost", 10001);
 		final boolean flush = false;
 		Thread t = new Thread() {
 			public void run() {

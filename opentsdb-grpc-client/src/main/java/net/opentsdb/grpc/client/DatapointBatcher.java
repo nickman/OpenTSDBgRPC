@@ -13,12 +13,14 @@
 package net.opentsdb.grpc.client;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import net.opentsdb.grpc.DataPoint;
 import net.opentsdb.grpc.MetricTags;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
+import net.opentsdb.grpc.TXTime;
 import net.opentsdb.grpc.client.streaming.BidiStreamer;
 import net.opentsdb.grpc.client.streaming.Streamer;
 
@@ -33,6 +35,7 @@ public class DatapointBatcher {
 	protected final BidiStreamer<PutDatapoints,PutDatapointsResponse> streamer;
 	protected final AtomicReference<PutDatapoints.Builder> batch = 
 			new AtomicReference<>(PutDatapoints.newBuilder().setDetails(true)); 
+	protected final AtomicLong serial = new AtomicLong();
 
 	
 	
@@ -60,7 +63,8 @@ public class DatapointBatcher {
 	}
 	
 	public int flush(Streamer<PutDatapoints, PutDatapointsResponse> streamer) {
-		PutDatapoints pd = batch.getAndSet(PutDatapoints.newBuilder().setDetails(true)).build();
+		TXTime tx = TXTime.newBuilder().setTxtime(System.currentTimeMillis()).build();
+		PutDatapoints pd = batch.getAndSet(PutDatapoints.newBuilder().setDetails(true)).setTxTime(tx).build();
 		int points = pd.getDataPointsCount();
 		streamer.send(pd);
 		return points;

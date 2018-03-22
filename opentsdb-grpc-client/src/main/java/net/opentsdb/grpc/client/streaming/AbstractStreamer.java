@@ -49,6 +49,7 @@ import io.grpc.MethodDescriptor.ReflectableMarshaller;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
+import net.opentsdb.grpc.common.RPCTypes;
 
 /**
  * <p>Title: AbstractStreamer</p>
@@ -58,15 +59,6 @@ import io.grpc.stub.StreamObserver;
  */
 
 public abstract class AbstractStreamer<T, R> implements Streamer<T, R>, Closeable {
-	private static final Class<?>[] DEFAULT_TYPES = new Class[] {Object.class, Object.class};
-	private static final Cache<MethodDescriptor<?, ?>, RPCTypes<?,?>> TYPE_CACHE = 
-			CacheBuilder.newBuilder()
-			.concurrencyLevel(Runtime.getRuntime().availableProcessors())
-			.initialCapacity(128)
-			.maximumSize(1024)
-			.weakKeys()
-			.recordStats()
-			.build();
 	private static final Set<MethodType> METHOD_TYPES = Collections.unmodifiableSet(
 			EnumSet.of(MethodType.BIDI_STREAMING, MethodType.CLIENT_STREAMING, MethodType.SERVER_STREAMING));
 	
@@ -135,83 +127,7 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R>, Closeabl
 	}
 
 	
-	public static class RPCTypes<T,R> {
-		private static Logger LOG = LoggerFactory.getLogger(RPCTypes.class);
-		
-		@SuppressWarnings({ "unchecked", "rawtypes" })
-		public static final RPCTypes DEFAULT_TYPE = new RPCTypes(Object.class, Object.class, false); 
-		
-		public final Class<T> requestType;
-		public final Class<R> responseType;
-		public final boolean providesFinal;
-		
-		
-		
-		public RPCTypes(Class<T> requestType, Class<R> responseType, boolean providesFinal) {
-			this.requestType = requestType;
-			this.responseType = responseType;
-			this.providesFinal = providesFinal;
-		}
-
-
-		@SuppressWarnings("unchecked")
-		RPCTypes(MethodDescriptor<T,R> md) {
-			Marshaller<T> rqm = md.getRequestMarshaller();
-			if(rqm instanceof ReflectableMarshaller) {
-				requestType = ((ReflectableMarshaller<T>)rqm).getMessageClass();
-			} else {
-				requestType = (Class<T>) Object.class;
-			}
-			Marshaller<R> rsm = md.getResponseMarshaller();
-			if(rsm instanceof ReflectableMarshaller) {
-				responseType = ((ReflectableMarshaller<R>)rsm).getMessageClass();
-			} else {
-				responseType = (Class<R>) Object.class;
-			}	
-			boolean pf = false;
-			try {
-				if(Object.class != responseType) {
-					Method m = responseType.getDeclaredMethod("getFinalResponse");
-					pf = m.getReturnType()==boolean.class && Modifier.isPublic(m.getModifiers());
-				}
-			} catch (Exception ex) {
-				pf = false;
-			}
-			providesFinal = pf;
-			LOG.info("Cached RPCTypes: {}", toString());
-		}
-		
-		
-		public String toString() {
-			return new StringBuilder("RPCType: rq=")
-				.append(requestType.getName())
-				.append(", resp=").append(responseType.getName())
-				.append(", pf=").append(providesFinal)
-				.toString();
-		}
-	}
 	
-	@SuppressWarnings("unchecked")
-	private RPCTypes<T,R> types() {
-		try {
-			return (RPCTypes<T, R>) TYPE_CACHE.get(md, new Callable<RPCTypes<T,R>>() {
-
-				@Override
-				public RPCTypes<T, R> call() throws Exception {
-					return new RPCTypes<T,R>(md);
-				}
-				
-			});
-		} catch (ExecutionException e) {
-			return RPCTypes.DEFAULT_TYPE;
-		}
-	}
-	
-	@SuppressWarnings("unchecked")
-	public RPCTypes<T,R> typesFor(MethodDescriptor<T,R> md) {
-		RPCTypes<T,R> types = (RPCTypes<T, R>) TYPE_CACHE.getIfPresent(md);
-		return types==null ? RPCTypes.DEFAULT_TYPE : types;
-	}
 	
 	
 	/**
@@ -228,7 +144,7 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R>, Closeabl
 		this.channel = Objects.requireNonNull(builder.channel(), "The passed ManagedChannel was null");
 		
 		this.outConsumer = Objects.requireNonNull(builder.outConsumer(), "The passed Consumer was null");
-		rpcTypes = types();
+		rpcTypes = RPCTypes.getRpcTypesFor(md);
 		expectsFinalResponse = rpcTypes.providesFinal;
 		
 		// If CLIENT_STREAMING, then first response is the final response

@@ -207,11 +207,17 @@ message DataPoints {
 	repeated DataPoint datapoints = 1;
 }
 
-
+message TXTime {
+	int64 txtime = 1;  // Inbound: send time, Outbound: same
+	int64 stime = 2; 	// Outbound: send elapased
+	int64 rtime = 3;  // Outbound: return time
+	int64 ptime = 4;	// Outbound: processing elapsed
+}
 
 message PutDatapoints {
-	bool details = 1;
-	repeated DataPoint dataPoints = 2;
+	TXTime txTime = 1;
+	bool details = 2;
+	repeated DataPoint dataPoints = 3;
 }
 
 message PutDatapointError {
@@ -224,6 +230,7 @@ message PutDatapointsResponse {
 	int64 failed = 2;
 	bool finalResponse = 3;
 	repeated PutDatapointError errors = 4;
+	TXTime txTime = 5;
 }
 
 

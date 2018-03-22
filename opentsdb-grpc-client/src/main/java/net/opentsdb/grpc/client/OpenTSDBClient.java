@@ -176,12 +176,12 @@ public class OpenTSDBClient implements Closeable {
 	 * Connects the client if it is not connected
 	 * @return this client
 	 */
-	public OpenTSDBClient open() {
+	public OpenTSDBClient open(ClientInterceptor...clientInterceptors) {
 		if(open.compareAndSet(false, true)) {
 			printConfig();
 			channel = clientConfig.build();
-			stub = OpenTSDBServiceGrpc.newStub(channel);
-			blockingStub = OpenTSDBServiceGrpc.newBlockingStub(channel);
+			stub = OpenTSDBServiceGrpc.newStub(channel).withInterceptors(clientInterceptors);
+			blockingStub = OpenTSDBServiceGrpc.newBlockingStub(channel).withInterceptors(clientInterceptors);
 		}
 		onStateChange();
 //		LOG.info("AGGRS: {}", 

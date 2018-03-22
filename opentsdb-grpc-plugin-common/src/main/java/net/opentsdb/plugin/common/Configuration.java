@@ -13,12 +13,18 @@
 package net.opentsdb.plugin.common;
 
 
+import java.io.File;
+import java.lang.management.ManagementFactory;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.regex.Pattern;
 
 import io.netty.channel.epoll.Epoll;
+import io.netty.channel.unix.DomainSocketAddress;
 import net.opentsdb.plugin.common.util.RelTime;
 import net.opentsdb.plugin.common.util.TUnit;
 import net.opentsdb.utils.Config;
@@ -31,6 +37,9 @@ import net.opentsdb.utils.Config;
  */
 
 public class Configuration {
+	
+	private static final String PID = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+	
 	public static final String GRPC_IFACE = "grpc.server.iface";
 	public static final String DEFAULT_IFACE = "0.0.0.0";
 	
@@ -267,6 +276,34 @@ public class Configuration {
 	 */
 	public int workerThreads() {
 		return config(GRPC_WORKER_THREADS, availableCores() * 2);
+	}
+	
+	public SocketAddress getGrpcSocketAddress() {
+		String iface = config(GRPC_IFACE, DEFAULT_IFACE);
+		int port = config(GRPC_PORT, DEFAULT_PORT);
+		URI unixSockUri = toURI(iface);
+		if(isEpoll() && unixSockUri != null) {
+			if(!"unix".equals(unixSockUri.getScheme())) {
+				throw new IllegalArgumentException("Invalid URI for Unix Domain Socket Listener: " + unixSockUri);
+			}
+			iface = iface + "." + PID + ".sock";
+			config.overrideConfig(GRPC_PORT, "0");
+			System.setProperty(GRPC_PORT, "0");
+			return new DomainSocketAddress(new File(toURI(iface).getPath()));
+		} else {
+			return new InetSocketAddress(iface, port);
+		}		
+	}
+	
+	private static URI toURI(String uri) {
+		try {
+			if(!uri.startsWith("unix://")) {
+				return null;
+			}
+			return new URI(uri.trim());
+		} catch (Exception ex) {
+			return null;
+		}
 	}
 	
 }

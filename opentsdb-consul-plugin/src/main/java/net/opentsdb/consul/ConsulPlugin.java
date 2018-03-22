@@ -13,6 +13,8 @@
 package net.opentsdb.consul;
 
 import java.lang.management.ManagementFactory;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,6 +35,7 @@ import com.ecwid.consul.v1.agent.AgentConsulClient;
 import com.ecwid.consul.v1.agent.model.NewService;
 import com.stumbleupon.async.Deferred;
 
+import io.netty.channel.unix.DomainSocketAddress;
 import net.opentsdb.consul.utils.NetUtils;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.plugin.common.Configuration;
@@ -57,6 +60,7 @@ public class ConsulPlugin extends StartupPlugin {
 	protected int tsdPort = -1;
 	protected int grpcPort = -1;
 	protected String listenerAddress = null;
+	protected String grpcListenerAddress = null;
 	protected URI[] consuls = NetUtils.uris("localhost:8500");
 	protected boolean read = false;
 	protected boolean write = false;
@@ -90,12 +94,24 @@ public class ConsulPlugin extends StartupPlugin {
 	protected void lateInit(Config config) {
 		tsdPort = config.getInt("tsd.network.port");
 		consuls = NetUtils.uris(cfg.config("consul.endpoints", "localhost:8500"));
-		grpcPort = cfg.config("grpc.server.port", -1);
-		listenerAddress = cfg.config("tsd.network.bind", (String)null);
 		
+		listenerAddress = cfg.config("tsd.network.bind", (String)null);
 		if(listenerAddress==null || NetUtils.isWildcard(listenerAddress)) {
 			listenerAddress = NetUtils.getListenAddressOrLoopback();			
 		}
+		
+		SocketAddress grpcSocketAddress = cfg.getGrpcSocketAddress();
+		if(grpcSocketAddress instanceof DomainSocketAddress) {
+			grpcPort = 0;
+			//grpcListenerAddress = "unix://" + ((DomainSocketAddress)grpcSocketAddress).path();
+			grpcListenerAddress = ((DomainSocketAddress)grpcSocketAddress).path();
+		} else {
+			InetSocketAddress isa = (InetSocketAddress) grpcSocketAddress;
+			grpcPort = isa.getPort();
+			grpcListenerAddress = listenerAddress;			
+		}
+		
+		
 		tsdAliases = cfg.config("tsd.consul.aliases", tsdAliases);
 		grpcAliases = cfg.config("grpc.consul.aliases", grpcAliases);
 		
@@ -112,7 +128,7 @@ public class ConsulPlugin extends StartupPlugin {
 		if(!DURATION_PATTERN.matcher(deregisterAfter).matches()) {
 			throw new IllegalArgumentException("Invalid consul.check.deregister: [" + deregisterAfter + "]");
 		}
-		LOG.info("TSD Port={}, gRPC Port={}, Address={}, Consuls={}", tsdPort, grpcPort, listenerAddress, Arrays.toString(consuls));
+		LOG.info("TSD Port={}, gRPC Port={}, TSDAddress={}, gRPCAddress={}, Consuls={}", tsdPort, grpcPort, listenerAddress, grpcListenerAddress, Arrays.toString(consuls));
 	}
 
 	/**
@@ -167,10 +183,14 @@ public class ConsulPlugin extends StartupPlugin {
 			LOG.info("Registered OpenTSDB HTTP Service: checkInterval={}, dereg={}, aliases={}", checkInterval, deregisterAfter, Arrays.toString(tsdAliases));
 			
 			if(grpcPort != -1) {
-				grpcServiceId = "grpc-opentsdb@" + HOSTNAME + "/" + listenerAddress + ":" + grpcPort;
+				grpcServiceId = ("grpc-opentsdb@" + HOSTNAME + "/" + grpcListenerAddress + ":" + grpcPort).replace("//", "/");
 				ns = new NewService();
-				ns.setAddress(listenerAddress);
-				ns.setPort(grpcPort);
+				if(grpcListenerAddress.startsWith("/")) {
+					ns.setAddress(grpcListenerAddress);
+				} else {
+					ns.setAddress(grpcListenerAddress);
+					ns.setPort(grpcPort);
+				}					
 				ns.setName("OpenTSDBGRPC");
 				ns.setId(grpcServiceId);
 				tags.add("grpc");

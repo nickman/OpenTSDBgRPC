@@ -12,9 +12,29 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.grpc.server;
 
-import static net.opentsdb.plugin.common.Configuration.*;
+import static net.opentsdb.plugin.common.Configuration.DEFAULT_GRPC_FLOW_CONTROL;
+import static net.opentsdb.plugin.common.Configuration.DEFAULT_GRPC_KEEP_ALIVE;
+import static net.opentsdb.plugin.common.Configuration.DEFAULT_GRPC_KEEP_ALIVE_TIMEOUT;
+import static net.opentsdb.plugin.common.Configuration.DEFAULT_GRPC_MAX_CALLS_PER_CONN;
+import static net.opentsdb.plugin.common.Configuration.DEFAULT_GRPC_MAX_CONN_AGE;
+import static net.opentsdb.plugin.common.Configuration.DEFAULT_GRPC_MAX_CONN_AGE_GRACE;
+import static net.opentsdb.plugin.common.Configuration.DEFAULT_GRPC_MAX_CONN_IDLE;
+import static net.opentsdb.plugin.common.Configuration.DEFAULT_GRPC_MAX_HEADERLIST_SIZE;
+import static net.opentsdb.plugin.common.Configuration.DEFAULT_GRPC_MAX_MESSAGE_SIZE;
+import static net.opentsdb.plugin.common.Configuration.DEFAULT_GRPC_PERMIT_KEEP_ALIVE;
+import static net.opentsdb.plugin.common.Configuration.DEFAULT_GRPC_PERMIT_KEEP_ALIVE_TIME;
+import static net.opentsdb.plugin.common.Configuration.GRPC_FLOW_CONTROL;
+import static net.opentsdb.plugin.common.Configuration.GRPC_KEEP_ALIVE;
+import static net.opentsdb.plugin.common.Configuration.GRPC_KEEP_ALIVE_TIMEOUT;
+import static net.opentsdb.plugin.common.Configuration.GRPC_MAX_CALLS_PER_CONN;
+import static net.opentsdb.plugin.common.Configuration.GRPC_MAX_CONN_AGE;
+import static net.opentsdb.plugin.common.Configuration.GRPC_MAX_CONN_AGE_GRACE;
+import static net.opentsdb.plugin.common.Configuration.GRPC_MAX_CONN_IDLE;
+import static net.opentsdb.plugin.common.Configuration.GRPC_MAX_HEADERLIST_SIZE;
+import static net.opentsdb.plugin.common.Configuration.GRPC_MAX_MESSAGE_SIZE;
+import static net.opentsdb.plugin.common.Configuration.GRPC_PERMIT_KEEP_ALIVE;
+import static net.opentsdb.plugin.common.Configuration.GRPC_PERMIT_KEEP_ALIVE_TIME;
 
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Map;
 import java.util.TreeMap;
@@ -32,12 +52,15 @@ import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.services.HealthStatusManager;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ServerChannel;
 import io.netty.channel.epoll.EpollChannelOption;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollMode;
+import io.netty.channel.epoll.EpollServerDomainSocketChannel;
 import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.unix.DomainSocketAddress;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.server.netty.EventLoopThreadFactory;
 import net.opentsdb.plugin.common.Configuration;
@@ -125,9 +148,8 @@ public class GRPCPlugin extends RpcPlugin {
 	
 	private void initServer() {
 		LOG.info("Creating Netty gRPC Server....");
-		String iface = cfg.config(GRPC_IFACE, DEFAULT_IFACE);
-		int port = cfg.config(GRPC_PORT, DEFAULT_PORT);
-		sa = new InetSocketAddress(iface, port);
+		sa = cfg.getGrpcSocketAddress();
+		LOG.info("GRPC Listener Socket Address: {}", sa);
 		eventLoopGroups();
 		RelTime keepAlive = cfg.config(GRPC_KEEP_ALIVE, DEFAULT_GRPC_KEEP_ALIVE);
 		RelTime keepAliveTimeout = cfg.config(GRPC_KEEP_ALIVE_TIMEOUT, DEFAULT_GRPC_KEEP_ALIVE_TIMEOUT);
@@ -136,6 +158,12 @@ public class GRPCPlugin extends RpcPlugin {
 		RelTime maxConnAgeGrace = cfg.config(GRPC_MAX_CONN_AGE_GRACE, DEFAULT_GRPC_MAX_CONN_AGE_GRACE);
 		RelTime maxConnIdle = cfg.config(GRPC_MAX_CONN_IDLE, DEFAULT_GRPC_MAX_CONN_IDLE);		
 		NettyServerBuilder serverBuilder = NettyServerBuilder.forAddress(sa);
+		Class<? extends ServerChannel> channelType = null;
+		if(sa instanceof DomainSocketAddress) {
+			channelType = EpollServerDomainSocketChannel.class;
+		} else {
+			channelType = cfg.isEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class;
+		}
 		healthStatusManager.setStatus("", ServingStatus.NOT_SERVING);
 		serverBuilder
 			.addService(server)
@@ -143,7 +171,7 @@ public class GRPCPlugin extends RpcPlugin {
 			.addService(healthStatusManager.getHealthService())
 			.bossEventLoopGroup(bossGroup)
 			.workerEventLoopGroup(workerGroup)
-			.channelType(cfg.isEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
+			.channelType(channelType)
 			.directExecutor()
 			.keepAliveTime(keepAlive.unitTime(), keepAlive.timeUnit())
 			.keepAliveTimeout(keepAliveTimeout.unitTime(), keepAliveTimeout.timeUnit())
@@ -160,7 +188,7 @@ public class GRPCPlugin extends RpcPlugin {
 			serverBuilder.withChildOption(EpollChannelOption.EPOLL_MODE, EpollMode.EDGE_TRIGGERED);
 		}
 		nettyServer = serverBuilder.build();
-		LOG.info("Netty gRPC Server Created");			
+		LOG.info("Netty gRPC Server Created. Listener: {}", sa);			
 	}
 	
 	/**

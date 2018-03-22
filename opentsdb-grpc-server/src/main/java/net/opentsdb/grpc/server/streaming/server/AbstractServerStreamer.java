@@ -19,10 +19,16 @@ import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.protobuf.Descriptors.FieldDescriptor;
+import com.google.protobuf.GeneratedMessageV3;
+import com.google.protobuf.Message.Builder;
+
 import io.grpc.MethodDescriptor;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
+import net.opentsdb.grpc.TXTime;
+import net.opentsdb.grpc.common.RPCTypes;
 import net.opentsdb.grpc.server.handlers.Handler;
 
 /**
@@ -85,6 +91,22 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 
 	@Override
 	public void onNext(T value) {
+		final long startTime = System.currentTimeMillis();
+		final RPCTypes<T,R> rpcTypes = RPCTypes.getRpcTypesFor(md);
+		final boolean hasTxTime = rpcTypes.hasTXTime;
+		final long sentTime;
+		final long sentElapsed;
+		
+		final TXTime txTime;
+		if(hasTxTime) {
+			txTime = rpcTypes.getTXTimeT(value);
+			sentTime = txTime.getTxtime();
+			sentElapsed = startTime - sentTime;
+		} else {
+			txTime = null;
+			sentTime = -1L;
+			sentElapsed = -1L;			
+		}
 		final int itemCount = subItemsIn.apply(value);
 		LOG.info("Received Message: items={}", itemCount);
 		sc.received(itemCount);
@@ -96,7 +118,12 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 						LOG.error("Failed to process message", t);
 						sc.failed(itemCount);						
 					} else {
-						responseObserver.onNext(r);
+						if(hasTxTime) {
+							R modR = applyTXTime(r, rpcTypes, txTime.getTxtime(), startTime, sentElapsed);
+							responseObserver.onNext(modR);
+						} else {
+							responseObserver.onNext(r);
+						}
 						sc.sent(subItemsOut.apply(r));
 					}
 				});
@@ -106,6 +133,27 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 		}		
 	}
 
+	@SuppressWarnings("unchecked")
+	// TODO:  Optimize Me
+	protected R applyTXTime(R r, RPCTypes<T,R> rpcTypes, long txTime, long startTime, long sentElapsed) {
+		long now = System.currentTimeMillis();
+		GeneratedMessageV3 gm = (GeneratedMessageV3)r;
+		Builder rBuilder = gm.newBuilderForType();
+		rBuilder.mergeFrom(gm);
+		FieldDescriptor fd = rBuilder.getDescriptorForType().findFieldByName("txTime");
+		
+		TXTime tx = TXTime.newBuilder()
+			.setStime(sentElapsed)
+			.setTxtime(txTime)
+			.setPtime(now - startTime)
+			.setRtime(now)
+			.build();
+			
+		rBuilder.setField(fd, tx);
+		
+		return (R)rBuilder.build();
+	}
+	
 	@Override
 	public void onError(Throwable t) {
 		if(StatusRuntimeException.class.isInstance(t) && t.getMessage().contains("CANCELLED:")) {

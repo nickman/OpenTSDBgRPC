@@ -33,6 +33,12 @@ public class StreamerContext {
 	private final LongAdder processedItems;
 	private final LongAdder failedItems;
 	private final LongAdder cancellations;
+	private final long startTime = System.currentTimeMillis();
+	public long getStartTime() {
+		return startTime;
+	}
+
+
 	private final AtomicBoolean open = new AtomicBoolean();
 	
 
