@@ -319,7 +319,7 @@ public class OSMonitor {
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		OSMonitor os = new OSMonitor("localhost", 10001);
+		OSMonitor os = new OSMonitor("localhost", 10000);
 		final boolean flush = false;
 		Thread t = new Thread() {
 			public void run() {

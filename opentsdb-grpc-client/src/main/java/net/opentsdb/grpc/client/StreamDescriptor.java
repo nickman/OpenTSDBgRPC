@@ -17,6 +17,7 @@ import net.opentsdb.grpc.CreateAnnotationResponse;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
 import net.opentsdb.grpc.TSDBAnnotations;
+import net.opentsdb.grpc.TXTime;
 
 /**
  * <p>Title: StreamDescriptor</p>
@@ -47,7 +48,33 @@ public interface StreamDescriptor<T, R> {
 	 * @return true if a final response, false otherwise
 	 */
 	default boolean finalResponse(R r) { return false; }
+	
+	/**
+	 * Retreives and returns the TXTime from the passed input
+	 * @param t The input
+	 * @return the TXTime or null if the input does not support
+	 */
+	default TXTime getTxTimeT(T t) {
+		return null;
+	}
 
+	/**
+	 * Retreives and returns the TXTime from the passed output
+	 * @param r The output
+	 * @return the TXTime or null if the output does not support
+	 */
+	default TXTime getTxTimeR(R r) {
+		return null;
+	}
+	
+	default void setTxTimeT(T t, TXTime tx) {
+		
+	}
+	
+	default void setTxTimeR(R r, TXTime tx) {
+		
+	}
+	
 	
 	/**
 	 * <p>Title: DatapointsDescriptor</p>
