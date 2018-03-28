@@ -23,6 +23,9 @@ service OpenTSDBService {
 	rpc Put(PutDatapoints) returns (PutDatapointsResponse) {}	
 	rpc Puts(stream PutDatapoints) returns (stream PutDatapointsResponse) {}
 	
+	
+	rpc MetricsLookup(FQMetricQuery) returns (stream FQMetrics) {}
+	
 	rpc AssignUid(Assignment) returns (Uid) {}
 	rpc AssignUids(stream Assignment) returns (stream Uid) {}
 
@@ -194,6 +197,24 @@ message FilterMetas {
 message MetricTags {
 	map<string, string> tags = 1;
 }
+
+message FQMetric {
+	string metric = 1;
+	map<string, string> tags = 2;
+	Tsuid tsuid = 3;
+}
+
+message FQMetrics {
+	repeated FQMetric fqmetrics = 1; 
+}
+
+message FQMetricQuery {
+	string expression = 1;
+	bool includeTsuids = 2;
+	int32 maxValues = 3;
+}
+
+
 
 message DataPoint {
 	string metric = 1;
