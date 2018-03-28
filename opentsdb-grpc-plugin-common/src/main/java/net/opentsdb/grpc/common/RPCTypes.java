@@ -12,8 +12,6 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.grpc.common;
 
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
@@ -31,6 +29,7 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.ReflectableMarshaller;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc;
 import net.opentsdb.grpc.PutDatapoints;
+import net.opentsdb.grpc.PutDatapointsResponse;
 import net.opentsdb.grpc.TXTime;
 
 
@@ -40,11 +39,13 @@ import net.opentsdb.grpc.TXTime;
  * <p>Description: A cache of details about the send and return types of gRPC RPCs</p> 
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>net.opentsdb.grpc.common.RPCTypes</code></p>
+ * @param <T> The request type
+ * @param <R> The response type
  */
 
 public class RPCTypes<T, R> {
 
-	private static final Cache<MethodDescriptor<?, ?>, RPCTypes<?,?>> TYPE_CACHE = 
+	private static final Cache<MethodDescriptor<?, ?>, RPCTypes<?,?>> MD_CACHE = 
 			CacheBuilder.newBuilder()
 			.concurrencyLevel(Runtime.getRuntime().availableProcessors())
 			.initialCapacity(128)
@@ -52,104 +53,144 @@ public class RPCTypes<T, R> {
 			.weakKeys()
 			.recordStats()
 			.build();
-
+	
 	private static Logger LOG = LoggerFactory.getLogger(RPCTypes.class);
 	
+	public static final String TX_TIME_FIELD_NAME = "txTime";
+	public static final String IS_FINAL_FIELD_NAME = "finalResponse";
+	
 	@SuppressWarnings({ "unchecked", "rawtypes" })
-	public static final RPCTypes DEFAULT_TYPE = new RPCTypes(Object.class, Object.class, false, false, null, null, null, null); 
+	public static final RPCTypes DEFAULT_TYPE = new RPCTypes(Object.class, Object.class, false, false, null, null, null, null, null); 
 	
 	public final Class<T> requestType;
 	public final Class<R> responseType;
 	public final boolean providesFinal;
 	public final boolean hasTXTime;
-	private final Method getTxMethodT;
-	private final Method getTxMethodR;
-	private final Method setTxMethodT;
-	private final Method setTxMethodR;
+	public final Descriptor descriptorT;
+	public final Descriptor descriptorR;
+	public final FieldDescriptor finalResponseFieldDescriptor;
+	public final FieldDescriptor txTimeFieldDescriptorT;
+	public final FieldDescriptor txTimeFieldDescriptorR;
 	
 	
 	
-	public RPCTypes(Class<T> requestType, Class<R> responseType, boolean providesFinal, boolean hasTXTime, Method getTxMethodT, Method getTxMethodR,  Method setTxMethodT, Method setTxMethodR) {
+	public RPCTypes(Class<T> requestType, Class<R> responseType, boolean providesFinal, boolean hasTXTime, 
+			Descriptor descriptorT, Descriptor descriptorR, 
+			FieldDescriptor txTimeFieldDescriptorT, FieldDescriptor txTimeFieldDescriptorR, FieldDescriptor finalResponseFieldDescriptor) {
 		this.requestType = requestType;
 		this.responseType = responseType;
 		this.providesFinal = providesFinal;
 		this.hasTXTime = hasTXTime;
-		this.getTxMethodT = getTxMethodT;
-		this.getTxMethodR = getTxMethodR;
-		this.setTxMethodT = setTxMethodT;
-		this.setTxMethodR = setTxMethodR;		
+		this.descriptorT =  descriptorT;
+		this.descriptorR = descriptorR;
+		this.finalResponseFieldDescriptor = finalResponseFieldDescriptor;
+		this.txTimeFieldDescriptorT = txTimeFieldDescriptorT;
+		this.txTimeFieldDescriptorR = txTimeFieldDescriptorR;
 		
 	}
 
 
 	@SuppressWarnings("unchecked")
 	RPCTypes(MethodDescriptor<T,R> md) {
-		Marshaller<T> rqm = md.getRequestMarshaller();
-		boolean bothReflectable = true;
-		if(rqm instanceof ReflectableMarshaller) {
-			requestType = ((ReflectableMarshaller<T>)rqm).getMessageClass();
+		if(areBothGeneratedMessages(md)) {
+			requestType = getGeneratedMessage(md.getRequestMarshaller());
+			responseType = getGeneratedMessage(md.getResponseMarshaller());
+			descriptorT = getDescriptor(requestType);
+			descriptorR = getDescriptor(responseType);
+			finalResponseFieldDescriptor = descriptorR.findFieldByName(IS_FINAL_FIELD_NAME);
+			providesFinal = finalResponseFieldDescriptor != null;
+			txTimeFieldDescriptorT = descriptorT.findFieldByName(TX_TIME_FIELD_NAME);
+			txTimeFieldDescriptorR = descriptorR.findFieldByName(TX_TIME_FIELD_NAME);
+			hasTXTime = txTimeFieldDescriptorT != null && txTimeFieldDescriptorR != null;
 		} else {
 			requestType = (Class<T>) Object.class;
-			bothReflectable = false;
-		}
-		Marshaller<R> rsm = md.getResponseMarshaller();
-		if(rsm instanceof ReflectableMarshaller) {
-			responseType = ((ReflectableMarshaller<R>)rsm).getMessageClass();
-		} else {
 			responseType = (Class<R>) Object.class;
-			bothReflectable = false;
-		}	
-		if(!bothReflectable) {
 			providesFinal = false;
 			hasTXTime = false;
-			getTxMethodT = null;
-			getTxMethodR = null;
-			setTxMethodT = null;
-			setTxMethodR = null;						
-		} else {
-			providesFinal = getMethod(responseType, boolean.class, "getFinalResponse") != null;
-			getTxMethodT = getMethod(requestType, TXTime.class, "getTxTime");
-			getTxMethodR = getMethod(responseType, TXTime.class, "getTxTime");
-			setTxMethodT = getSetMethod(requestType, TXTime.class, "setTxTime");
-			setTxMethodR = getSetMethod(responseType, TXTime.class, "setTxTime");
+			descriptorT = null;
+			descriptorR = null; 
+			finalResponseFieldDescriptor = null;
+			txTimeFieldDescriptorT = null;
+			txTimeFieldDescriptorR = null;
 			
-			hasTXTime = getTxMethodT != null && getTxMethodR != null;
 		}
 		LOG.info("Cached RPCTypes: {}", toString());
 	}
 	
 	
+	private boolean areBothGeneratedMessages(MethodDescriptor<T,R> md) {
+		return getGeneratedMessage(md.getRequestMarshaller()) != null &&
+				getGeneratedMessage(md.getResponseMarshaller()) != null;
+	}
+	
+	private static <E> Class<E> getGeneratedMessage(Marshaller<E> marshaller) {
+		if(marshaller instanceof ReflectableMarshaller) {
+			Class<E> type = ((ReflectableMarshaller<E>)marshaller).getMessageClass();
+			if(GeneratedMessageV3.class.isAssignableFrom(type)) {
+				return type;
+			}
+		}
+		return null;
+	}
+	
+	private static Descriptor getDescriptor(Class<?> messageType) {
+		try {
+			return (Descriptor) messageType.getDeclaredMethod("getDescriptor").invoke(null);
+		} catch (Exception ex) {
+			return null;
+		}
+	}
+	
+	
 	public TXTime getTXTimeT(T t) {
 		try {
-			return (TXTime)getTxMethodT.invoke(t);
+			if(txTimeFieldDescriptorT==null) {
+				return null;
+			}
+			return (TXTime)((GeneratedMessageV3)t).getField(txTimeFieldDescriptorT);
 		} catch (Exception ex) {
 			throw new RuntimeException("Failed to get TXTime from instance of " + t.getClass().getName(), ex);
 		}
 	}
 	
-	public void setTXTimeT(Object builder, TXTime txTime) {
+	@SuppressWarnings("unchecked")
+	public T setTXTimeT(T t, TXTime txTime) {
 		try {
-			setTxMethodT.invoke(builder, txTime);
+			if(txTimeFieldDescriptorT!=null) {
+				GeneratedMessageV3 msg = (GeneratedMessageV3)t;
+				return (T)msg.newBuilderForType().mergeFrom(msg).setField(txTimeFieldDescriptorT, txTime).build();
+			}
+			return t;
 		} catch (Exception ex) {
-			throw new RuntimeException("Failed to set TXTime on instance of " + builder.getClass().getName(), ex);
+			throw new RuntimeException("Failed to set TXTime on instance of " + t.getClass().getName(), ex);
 		}
 	}
 	
 	public TXTime getTXTimeR(R r) {
 		try {
-			return (TXTime)getTxMethodT.invoke(r);
+			if(txTimeFieldDescriptorR==null) {
+				return null;
+			}
+			return (TXTime)((GeneratedMessageV3)r).getField(txTimeFieldDescriptorR);
 		} catch (Exception ex) {
 			throw new RuntimeException("Failed to get TXTime from instance of " + r.getClass().getName(), ex);
 		}
 	}
-
-	public void setTXTimeR(Object builder, TXTime txTime) {
+	
+	@SuppressWarnings("unchecked")
+	public R setTXTimeR(R r, TXTime txTime) {
 		try {
-			setTxMethodT.invoke(builder, txTime);
+			if(txTimeFieldDescriptorR!=null) {
+				GeneratedMessageV3 msg = (GeneratedMessageV3)r;
+				return (R)msg.newBuilderForType().mergeFrom(msg).setField(txTimeFieldDescriptorR, txTime).build();
+			}
+			return r;
 		} catch (Exception ex) {
-			throw new RuntimeException("Failed to set TXTime on instance of " + builder.getClass().getName(), ex);
+			throw new RuntimeException("Failed to set TXTime on instance of " + r.getClass().getName(), ex);
 		}
 	}
+
+	
 	
 	public static void main(String[] args) {
 		RPCTypes.getRpcTypesFor(OpenTSDBServiceGrpc.getPutMethod());
@@ -160,53 +201,27 @@ public class RPCTypes<T, R> {
 			FieldDescriptor bfd = PutDatapoints.newBuilder().getDescriptorForType().findFieldByName(fd.getName());
 			LOG.info("Builder Field: {} / {}", bfd.getName(), System.identityHashCode(bfd));
 		}
+		System.out.println("===============================================================================================");
+		gm = PutDatapointsResponse.newBuilder().build();
+		d = gm.getDescriptorForType();
+		for(FieldDescriptor fd : d.getFields()) {
+			LOG.info("Field: {} / {}", fd.getName(), System.identityHashCode(fd));
+			FieldDescriptor bfd = PutDatapointsResponse.newBuilder().getDescriptorForType().findFieldByName(fd.getName());
+			LOG.info("Builder Field: {} / {}", bfd.getName(), System.identityHashCode(bfd));
+		}
+		
 	}
 	
 	@SuppressWarnings("unchecked")
 	public static <T,R> RPCTypes<T,R> getRpcTypesFor(MethodDescriptor<T,R> md) {
 		try {
-			return (RPCTypes<T, R>) TYPE_CACHE.get(md, new Callable<RPCTypes<T,R>>(){
+			return (RPCTypes<T, R>) MD_CACHE.get(md, new Callable<RPCTypes<T,R>>(){
 				public RPCTypes<T,R> call() {
 					return new RPCTypes<T,R>(md);
 				}
 			});
 		} catch (ExecutionException e) {
 			return DEFAULT_TYPE;
-		}
-	}
-	
-	private static Method getMethod(Class<?> clazz, Class<?> returnType, String name) {
-		try {
-			Method m = clazz.getDeclaredMethod(name);
-			if(m.getReturnType()==returnType && Modifier.isPublic(m.getModifiers())) {
-				return m;
-			}
-			return null;
-		} catch (Exception ex) {
-			return null;
-		}
-	}
-	
-	private static Method getSetMethod(Class<?> clazz, Class<?> paramType, String name) {
-		try {
-			final String builderClassName = clazz.getName() + "$Builder";
-			Class<?> builderClass = null;
-			for(Class<?> subClass : clazz.getClasses()) {
-				if(builderClassName.equals(subClass.getName())) {
-					builderClass = subClass;
-					break;
-				}
-			}
-			if(builderClass==null) {
-				return null;
-			}
-			Method m = builderClass.getDeclaredMethod(name);
-			if(m.getParameterTypes()[0]==paramType && Modifier.isPublic(m.getModifiers())) {
-				return m;
-			}
-			return null;
-		} catch (Exception ex) {
-			return null;
 		}
 	}
 	

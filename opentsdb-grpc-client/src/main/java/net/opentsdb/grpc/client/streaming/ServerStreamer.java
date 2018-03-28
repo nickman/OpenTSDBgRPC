@@ -17,6 +17,8 @@ package net.opentsdb.grpc.client.streaming;
  * <p>Description: </p> 
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>net.opentsdb.grpc.server.streaming.ServerStreamer</code></p>
+ * @param <T> The request type
+ * @param <R> The response type
  */
 
 public class ServerStreamer<T, R> extends ServerStreamingSupport<T, R> {

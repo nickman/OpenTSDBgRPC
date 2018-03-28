@@ -21,6 +21,8 @@ import io.grpc.stub.StreamObserver;
  * <p>Description: </p> 
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>net.opentsdb.grpc.server.streaming.ServerStreamingSupport</code></p>
+ * @param <T> The request type
+ * @param <R> The response type
  */
 
 public abstract class ServerStreamingSupport<T, R> extends AbstractStreamer<T, R> {

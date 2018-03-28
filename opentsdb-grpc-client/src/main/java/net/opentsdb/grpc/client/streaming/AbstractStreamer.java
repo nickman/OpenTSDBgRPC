@@ -14,17 +14,13 @@ package net.opentsdb.grpc.client.streaming;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -36,16 +32,11 @@ import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.MethodDescriptor;
-import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
-import io.grpc.MethodDescriptor.ReflectableMarshaller;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
@@ -56,6 +47,8 @@ import net.opentsdb.grpc.common.RPCTypes;
  * <p>Description: </p> 
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>net.opentsdb.grpc.server.streaming.AbstractStreamer</code></p>
+ * @param <T> The request type
+ * @param <R> The response type 
  */
 
 public abstract class AbstractStreamer<T, R> implements Streamer<T, R>, Closeable {
@@ -109,6 +102,10 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R>, Closeabl
 	
 	protected ClientCallStreamObserver<T> requestStream;
 	
+	protected final boolean noQueue;
+	
+
+	
 	@Override
 	public void close() throws IOException {
 		if(clientClosed.compareAndSet(false, true)) {
@@ -158,8 +155,10 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R>, Closeabl
 		int queueSize = builder.inQueueSize();
 		if(queueSize==0) {
 			inQueue = null;
+			noQueue = true;
 		} else {
 			inQueue = new ArrayBlockingQueue<>(queueSize, true);
+			noQueue = false;
 		}
 		
 		clientCall = channel.newCall(md, callOptions);
@@ -278,6 +277,30 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R>, Closeabl
 		this.onErrorAction = onErrorAction;
 		return this;
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.grpc.server.streaming.Streamer#send(java.lang.Object)
+	 */
+	public boolean send(T t) {
+		if(clientClosed.get()) {
+			throw new IllegalStateException("Streamer client is closed");
+		}
+		long inCount = subItemsIn.apply(t);
+		if(noQueue || requestStream.isReady() ) {
+			requestStream.onNext(t);
+			requestStream.request(1);
+			requestsSent.add(inCount);
+			inFlight.addAndGet(inCount);			
+		} else {
+			if(!inQueue.offer(t)) {
+				requestsDropped.increment();
+				return false;
+			}
+		}
+		return true;
+	}
+	
 
 
 }

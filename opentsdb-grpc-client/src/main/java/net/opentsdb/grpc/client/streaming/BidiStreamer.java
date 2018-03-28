@@ -19,14 +19,16 @@ import java.util.function.BiConsumer;
  * <p>Description: Encapsulates a generic bidirectional client call</p> 
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>net.opentsdb.grpc.server.Streamer</code></p>
+ * @param <T> The request type
+ * @param <R> The response type 
  */
 
 public class BidiStreamer<T, R> extends ServerStreamingSupport<T,R> {
-	protected final boolean noQueue;
+	
+	
 	
 	public BidiStreamer(StreamerBuilder<T,R> builder) {
 		super(builder);
-		noQueue = inQueue == null;
 	}
 	
 	public BidiStreamer<T,R> start() {
@@ -41,24 +43,6 @@ public class BidiStreamer<T, R> extends ServerStreamingSupport<T,R> {
 	}
 
 	
-	public boolean send(T t) {
-		if(clientClosed.get()) {
-			throw new IllegalStateException("Streamer client is closed");
-		}
-		long inCount = subItemsIn.apply(t);
-		if(noQueue || requestStream.isReady() ) {
-			requestStream.onNext(t);
-			requestStream.request(1);
-			requestsSent.add(inCount);
-			inFlight.addAndGet(inCount);			
-		} else {
-			if(!inQueue.offer(t)) {
-				requestsDropped.increment();
-				return false;
-			}
-		}
-		return true;
-	}
 	
 	
 

@@ -19,6 +19,8 @@ import java.util.concurrent.TimeUnit;
  * <p>Description: Defines an auto streamer</p> 
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>net.opentsdb.grpc.server.Streamer</code></p>
+ * @param <T> The request type
+ * @param <R> The response type
  */
 
 public interface Streamer<T, R> {

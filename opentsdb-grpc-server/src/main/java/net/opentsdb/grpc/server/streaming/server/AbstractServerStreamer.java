@@ -47,6 +47,7 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 	protected final Function<R, Integer> subItemsOut;
 	protected final MethodDescriptor<T,R> md;   // e.g. opentsdb.OpenTSDBService/Puts
 	protected final Handler<T,R> handler;
+	protected final RPCTypes<T,R> rpcTypes;
 	protected final ServerCallStreamObserver<R> responseObserver;
 	protected final StreamerContext sc;
 	protected final Logger LOG;
@@ -60,6 +61,7 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 	 */
 	public AbstractServerStreamer(StreamerBuilder<T,R> builder, StreamerContext streamerContext, StreamObserver<R> responseObserver) {
 		md = builder.methodDescriptor();
+		rpcTypes = RPCTypes.getRpcTypesFor(md);
 		open = streamerContext.openFlag();
 		subItemsIn = builder.subItemsIn();
 		subItemsOut = builder.subItemsOut();
@@ -92,7 +94,7 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 	@Override
 	public void onNext(T value) {
 		final long startTime = System.currentTimeMillis();
-		final RPCTypes<T,R> rpcTypes = RPCTypes.getRpcTypesFor(md);
+		
 		final boolean hasTxTime = rpcTypes.hasTXTime;
 		final long sentTime;
 		final long sentElapsed;
@@ -119,7 +121,15 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 						sc.failed(itemCount);						
 					} else {
 						if(hasTxTime) {
-							R modR = applyTXTime(r, rpcTypes, txTime.getTxtime(), startTime, sentElapsed);
+							long now = System.currentTimeMillis();
+							TXTime tx = TXTime.newBuilder()
+									.setStime(sentElapsed)
+									.setTxtime(txTime.getTxtime())
+									.setPtime(now - startTime)
+									.setRtime(now)
+									.build();
+							
+							R modR = rpcTypes.setTXTimeR(r, tx);
 							responseObserver.onNext(modR);
 						} else {
 							responseObserver.onNext(r);

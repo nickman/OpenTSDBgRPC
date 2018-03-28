@@ -19,13 +19,15 @@ import java.util.function.Function;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.MethodDescriptor;
-import net.opentsdb.grpc.client.StreamDescriptor;
+import net.opentsdb.grpc.common.StreamDescriptor;
 
 /**
  * <p>Title: BaseStreamerBuilder</p>
  * <p>Description: A base class for Streamer Builders</p> 
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>net.opentsdb.grpc.server.streaming.BaseStreamerBuilder</code></p>
+ * @param <T> The request type
+ * @param <R> The response type 
  */
 
 public class StreamerBuilder<T,R> {

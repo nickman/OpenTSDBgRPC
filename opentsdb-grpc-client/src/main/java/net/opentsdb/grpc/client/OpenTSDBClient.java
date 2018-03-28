@@ -57,6 +57,7 @@ import net.opentsdb.grpc.TSDBAnnotations;
 import net.opentsdb.grpc.client.streaming.BidiStreamer;
 import net.opentsdb.grpc.client.streaming.StreamerBuilder;
 import net.opentsdb.grpc.client.util.ClientConfiguration;
+import net.opentsdb.grpc.common.StreamDescriptor;
 
 /**
  * <p>Title: OpenTSDBClient</p>

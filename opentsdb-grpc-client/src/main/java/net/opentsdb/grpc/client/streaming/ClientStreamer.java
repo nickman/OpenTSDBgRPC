@@ -19,41 +19,22 @@ import io.grpc.stub.StreamObserver;
  * <p>Description: </p> 
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>net.opentsdb.grpc.server.streaming.ClientStreamer</code></p>
+ * @param <T> The request type
+ * @param <R> The response type
  */
 
 public class ClientStreamer<T, R> extends AbstractStreamer<T, R> {
-	protected final boolean noQueue;
+	
 	/**
 	 * Creates a new ClientStreamer
 	 * @param builder
 	 */
 	public ClientStreamer(StreamerBuilder<T, R> builder) {
 		super(builder);
-		noQueue = inQueue == null;
+		
+		
 	}
 
-	/**
-	 * {@inheritDoc}
-	 * @see net.opentsdb.grpc.server.streaming.Streamer#send(java.lang.Object)
-	 */
-	public boolean send(T t) {
-		if(clientClosed.get()) {
-			throw new IllegalStateException("Streamer client is closed");
-		}
-		long inCount = subItemsIn.apply(t);
-		if(noQueue || requestStream.isReady() ) {
-			requestStream.onNext(t);
-			requestStream.request(1);
-			requestsSent.add(inCount);
-			inFlight.addAndGet(inCount);			
-		} else {
-			if(!inQueue.offer(t)) {
-				requestsDropped.increment();
-				return false;
-			}
-		}
-		return true;
-	}
 
 
 	/**
