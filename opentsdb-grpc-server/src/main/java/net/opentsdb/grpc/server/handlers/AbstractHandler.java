@@ -29,6 +29,7 @@ import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.server.streaming.server.StreamerContext;
 import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.stats.StatsCollector;
+import reactor.core.publisher.Flux;
 
 /**
  * <p>Title: AbstractHandler</p>
@@ -85,7 +86,11 @@ public abstract class AbstractHandler<T,R> implements Handler<T, R> {
 	
 	@Override
 	public CompletableFuture<R> invoke(T t, StreamerContext sc) {		
-		return null;
+		return CompletableFuture.completedFuture(null);
+	}
+	
+	public CompletableFuture<Flux<R>> invokeForFlux(T t, StreamerContext sc) {
+		return CompletableFuture.completedFuture(Flux.empty()); 
 	}
 	
 	@Override

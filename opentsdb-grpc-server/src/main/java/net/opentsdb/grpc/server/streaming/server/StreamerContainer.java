@@ -94,11 +94,11 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 	 * @param responseObserver The client response observer
 	 * @return The new server streamer
 	 */
-	public ServerStreamer<T,R> newServerStreamer(StreamObserver<R> responseObserver) {
+	public ServerStreamer<T,R> newServerStreamer(T request, StreamObserver<R> responseObserver) {
 		if(methodType != MethodType.SERVER_STREAMING) {
 			throw new IllegalArgumentException("The method [" + md.getFullMethodName() + "] is not of type SERVER_STREAMING");
 		}
-		return new ServerStreamer<T,R>(builder, new StreamerContext(ss), responseObserver);
+		return new ServerStreamer<T,R>(builder, new StreamerContext(ss), responseObserver, request);
 	}
 	
 	public void doStats(StatsCollector collector) {

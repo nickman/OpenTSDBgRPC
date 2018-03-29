@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import javax.management.ObjectName;
 
@@ -26,10 +27,16 @@ import org.hbase.async.Scanner;
 
 import com.stumbleupon.async.Deferred;
 
+import io.grpc.stub.StreamObserver;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.FQMetricQuery;
 import net.opentsdb.grpc.FQMetrics;
+import net.opentsdb.grpc.OpenTSDBServiceGrpc;
+import net.opentsdb.grpc.PutDatapoints;
+import net.opentsdb.grpc.PutDatapointsResponse;
 import net.opentsdb.grpc.server.SuAsyncHelpers;
+import net.opentsdb.grpc.server.streaming.server.StreamerBuilder;
+import net.opentsdb.grpc.server.streaming.server.StreamerContainer;
 import net.opentsdb.grpc.server.streaming.server.StreamerContext;
 import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.stats.StatsCollector;
@@ -50,11 +57,24 @@ public class MetricLookupHandler extends AbstractHandler<FQMetricQuery, FQMetric
 	private static final byte[] Q_TAGV = "tagv".getBytes(CHARSET);
 	
 	private final HBaseClient hbaseClient;
+	
+	protected final StreamerContainer<FQMetricQuery, FQMetrics> metricLookupStreamContainer = 
+			new StreamerContainer<>(new StreamerBuilder<>(OpenTSDBServiceGrpc.getMetricsLookupMethod(), this)
+				.subItemsIn(t -> 1)
+				.subItemsOut(f -> f.getFqmetricsCount())
+			);
+
 
 	public MetricLookupHandler(TSDB tsdb, Configuration cfg) {
 		super(tsdb, cfg);
 		hbaseClient = tsdb.getClient();
 	}
+	
+	public void metricsLookup(FQMetricQuery query, StreamObserver<FQMetrics> responseObserver) {
+		metricLookupStreamContainer.newServerStreamer(query, responseObserver).start();
+		
+	}
+
 	
 	@Override
 	public CompletableFuture<FQMetrics> invoke(FQMetricQuery t, StreamerContext sc) {
@@ -71,17 +91,47 @@ public class MetricLookupHandler extends AbstractHandler<FQMetricQuery, FQMetric
 		}
 		final boolean exactTags = compiledQuery.isPropertyListPattern();
 		
+		Flux<String> metricFlux = lookupNames(Q_METRIC, compiledQuery.getDomain(), max);
+		Flux<String> tagKeyFlux = Flux.concat(
+				compiledQuery.getKeyPropertyList().keySet().stream()
+					.<Flux<String>>map(k -> lookupNames(Q_TAGK, k, max))
+					.collect(Collectors.toList())
+		);
+		Flux<String> tagValueFlux = Flux.concat(
+				compiledQuery.getKeyPropertyList().values().stream()
+					.<Flux<String>>map(v -> lookupNames(Q_TAGV, v, max))
+					.collect(Collectors.toList())
+		);
+		Flux.concat(metricFlux, tagKeyFlux, tagValueFlux).parallel(3)
+			.doOnComplete(() -> {
+				processResults(metricFlux, tagKeyFlux, tagValueFlux);
+				cf.complete(FQMetrics.newBuilder().build());
+			})
+			.doOnError(err -> {
+				LOG.error("Lookup FluxConcat Failure", err);
+				cf.completeExceptionally(err);
+			})
+			.subscribe();
+		
 		return cf;
 	}
 	
-	protected Flux<String> lookupName(byte[] qualifier, String regex, final int maxRows) {
+	protected void processResults(Flux<String> metricFlux, Flux<String> tagKeyFlux, Flux<String> tagValueFlux) {
+		LOG.info("\n\tMetric Lookup Results:\n\tMetrics:{}\n\tTag Keys:{}\n\tTag Values:{}",
+				metricFlux.count().block(),
+				tagKeyFlux.count().block(),
+				tagValueFlux.count().block()
+		);
+	}
+	
+	protected Flux<String> lookupNames(byte[] qualifier, String regex, final int maxRows) {
 		return Flux.create(sink -> {
 			Scanner scanner = null;
 			try {
 				scanner = hbaseClient.newScanner(tsdb.uidTable());
 				scanner.setFamily(ID_FAMILY);
 				scanner.setQualifier(qualifier);
-				scanner.setKeyRegexp(regex);
+				scanner.setKeyRegexp(regex(regex));
 				final AtomicBoolean done = new AtomicBoolean(false);
 				final AtomicInteger rowsSoFar = new AtomicInteger();
 				Deferred<ArrayList<ArrayList<KeyValue>>> drows = null;
@@ -110,6 +160,12 @@ public class MetricLookupHandler extends AbstractHandler<FQMetricQuery, FQMetric
 				}
 			}
 		});
+	}
+	
+	protected static String regex(String expr) {
+		return expr
+			.replace(".", "\\.")
+			.replace("*", ".*");
 	}
 	
 	protected static ObjectName compileExpr(FQMetricQuery query) throws Exception {

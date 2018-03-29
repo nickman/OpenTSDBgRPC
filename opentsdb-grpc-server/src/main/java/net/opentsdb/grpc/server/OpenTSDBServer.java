@@ -42,6 +42,8 @@ import net.opentsdb.grpc.CreateAnnotationResponse;
 import net.opentsdb.grpc.DPoint;
 import net.opentsdb.grpc.DataPointQuery;
 import net.opentsdb.grpc.Empty;
+import net.opentsdb.grpc.FQMetricQuery;
+import net.opentsdb.grpc.FQMetrics;
 import net.opentsdb.grpc.FilterMeta;
 import net.opentsdb.grpc.FilterMetas;
 import net.opentsdb.grpc.KeyValues;
@@ -60,6 +62,7 @@ import net.opentsdb.grpc.Tsuids;
 import net.opentsdb.grpc.Uid;
 import net.opentsdb.grpc.server.handlers.AnnotationStreamHandler;
 import net.opentsdb.grpc.server.handlers.DataPointStreamHandler;
+import net.opentsdb.grpc.server.handlers.MetricLookupHandler;
 import net.opentsdb.meta.Annotation;
 import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.query.filter.TagVFilter;
@@ -82,6 +85,7 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	private final AggregatorNames aggrNames;
 	private final DataPointStreamHandler putHandler;
 	private final AnnotationStreamHandler annHandler;
+	private final MetricLookupHandler metricLookupHandler;
 	private final String serverId; 
 	
 
@@ -99,6 +103,7 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 		aggrNames = buildAggregatorNames();
 		putHandler = new DataPointStreamHandler(tsdb, cfg);
 		annHandler = new AnnotationStreamHandler(tsdb, cfg);
+		metricLookupHandler = new MetricLookupHandler(tsdb, cfg);
 		serverId = host + ":" + cfg.config(Configuration.GRPC_PORT, -1);
 	}
 
@@ -377,6 +382,15 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	@Override
 	public StreamObserver<PutDatapoints> puts(StreamObserver<PutDatapointsResponse> responseObserver) {
 		return putHandler.puts(responseObserver);
+	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#metricsLookup(net.opentsdb.grpc.FQMetricQuery, io.grpc.stub.StreamObserver)
+	 */
+	@Override
+	public void metricsLookup(FQMetricQuery request, StreamObserver<FQMetrics> responseObserver) {
+		metricLookupHandler.metricsLookup(request, responseObserver);
 	}
 
 	@Override

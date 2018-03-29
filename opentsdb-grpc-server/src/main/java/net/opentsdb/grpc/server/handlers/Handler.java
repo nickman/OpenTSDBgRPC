@@ -15,6 +15,7 @@ package net.opentsdb.grpc.server.handlers;
 import java.util.concurrent.CompletableFuture;
 
 import net.opentsdb.grpc.server.streaming.server.StreamerContext;
+import reactor.core.publisher.Flux;
 
 /**
  * <p>Title: Handler</p>
@@ -32,6 +33,8 @@ public interface Handler<T, R> {
 	 * @return a completable future that will resolve to a response
 	 */
 	public CompletableFuture<R> invoke(T t, StreamerContext sc);
+	
+	public CompletableFuture<Flux<R>> invokeForFlux(T t, StreamerContext sc);
 	
 	/**
 	 * For handlers that support it, requests the final response.
