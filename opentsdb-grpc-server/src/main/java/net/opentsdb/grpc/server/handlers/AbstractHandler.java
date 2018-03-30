@@ -26,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.opentsdb.core.TSDB;
+import net.opentsdb.grpc.FQMetric;
 import net.opentsdb.grpc.server.streaming.server.StreamerContext;
 import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.stats.StatsCollector;
@@ -89,8 +90,8 @@ public abstract class AbstractHandler<T,R> implements Handler<T, R> {
 		return CompletableFuture.completedFuture(null);
 	}
 	
-	public CompletableFuture<Flux<R>> invokeForFlux(T t, StreamerContext sc) {
-		return CompletableFuture.completedFuture(Flux.empty()); 
+	public Flux<R> invokeForFlux(T t, StreamerContext sc) {
+		return Flux.empty(); 
 	}
 	
 	@Override

@@ -12,6 +12,8 @@
 // see <http://www.gnu.org/licenses/>.
 package net.opentsdb.grpc.client.streaming;
 
+import io.grpc.stub.ClientCalls;
+
 /**
  * <p>Title: ServerStreamer</p>
  * <p>Description: </p> 
@@ -30,6 +32,13 @@ public class ServerStreamer<T, R> extends ServerStreamingSupport<T, R> {
 	public ServerStreamer(StreamerBuilder<T, R> builder) {
 		super(builder);
 	}
+	
+	public ServerStreamer<T,R> start() {
+		super.start();
+		LOG.info("ServerStreamer Started: {}", md.getFullMethodName());
+		return this;
+	}
+
 
 	/**
 	 * {@inheritDoc}
@@ -37,7 +46,7 @@ public class ServerStreamer<T, R> extends ServerStreamingSupport<T, R> {
 	 */
 	@Override
 	public boolean send(T t) {
-		requestObserver.onNext(t);
+		ClientCalls.asyncServerStreamingCall(clientCall, t, responseObserver);
 		requestsSent.increment();
 		return true;
 	}

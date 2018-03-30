@@ -42,6 +42,7 @@ import net.opentsdb.grpc.CreateAnnotationResponse;
 import net.opentsdb.grpc.DPoint;
 import net.opentsdb.grpc.DataPointQuery;
 import net.opentsdb.grpc.Empty;
+import net.opentsdb.grpc.FQMetric;
 import net.opentsdb.grpc.FQMetricQuery;
 import net.opentsdb.grpc.FQMetrics;
 import net.opentsdb.grpc.FilterMeta;
@@ -384,14 +385,12 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 		return putHandler.puts(responseObserver);
 	}
 	
-	/**
-	 * {@inheritDoc}
-	 * @see net.opentsdb.grpc.OpenTSDBServiceGrpc.OpenTSDBServiceImplBase#metricsLookup(net.opentsdb.grpc.FQMetricQuery, io.grpc.stub.StreamObserver)
-	 */
 	@Override
-	public void metricsLookup(FQMetricQuery request, StreamObserver<FQMetrics> responseObserver) {
+	public void metricsLookup(FQMetricQuery request, StreamObserver<FQMetric> responseObserver) {		
 		metricLookupHandler.metricsLookup(request, responseObserver);
 	}
+
+	
 
 	@Override
 	public void assignUid(Assignment request, StreamObserver<Uid> responseObserver) {

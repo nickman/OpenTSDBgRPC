@@ -24,7 +24,7 @@ service OpenTSDBService {
 	rpc Puts(stream PutDatapoints) returns (stream PutDatapointsResponse) {}
 	
 	
-	rpc MetricsLookup(FQMetricQuery) returns (stream FQMetrics) {}
+	rpc MetricsLookup(FQMetricQuery) returns (stream FQMetric) {}
 	
 	rpc AssignUid(Assignment) returns (Uid) {}
 	rpc AssignUids(stream Assignment) returns (stream Uid) {}

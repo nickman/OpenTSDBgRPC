@@ -36,6 +36,7 @@ public class ServerStreamer<T, R> extends AbstractServerStreamer<T, R> {
 	public ServerStreamer(StreamerBuilder<T, R> builder, StreamerContext streamerContext, StreamObserver<R> responseObserver, T request) {
 		super(builder, streamerContext, responseObserver);
 		this.request = request;
+		onNext(request);
 	}
 	
 	public ServerStreamer<T,R> start() {
@@ -45,7 +46,7 @@ public class ServerStreamer<T, R> extends AbstractServerStreamer<T, R> {
 	
 	
 	@Override
-	public void onNext(T value) {
+	public void onNext(T t) {
 		final long startTime = System.currentTimeMillis();
 		
 		final boolean hasTxTime = rpcTypes.hasTXTime;
@@ -54,7 +55,7 @@ public class ServerStreamer<T, R> extends AbstractServerStreamer<T, R> {
 		
 		final TXTime txTime;
 		if(hasTxTime) {
-			txTime = rpcTypes.getTXTimeT(value);
+			txTime = rpcTypes.getTXTimeT(t);
 			sentTime = txTime.getTxtime();
 			sentElapsed = startTime - sentTime;
 		} else {
@@ -62,43 +63,38 @@ public class ServerStreamer<T, R> extends AbstractServerStreamer<T, R> {
 			sentTime = -1L;
 			sentElapsed = -1L;			
 		}
-		final int itemCount = subItemsIn.apply(value);
+		final int itemCount = subItemsIn.apply(t);
 		LOG.info("Received Message: items={}", itemCount);
 		sc.received(itemCount);
 		try {
-			CompletableFuture<Flux<R>> pendingResponse = handler.invokeForFlux(value, sc);
-			if(pendingResponse!=null) {
-				pendingResponse.whenComplete((f, t) -> {
-					if(t!=null) {
-						LOG.error("Failed to process message", t);
-						sc.failed(itemCount);						
-					} else {
-						f.subscribe(
-								r -> {
-									if(hasTxTime) {
-										long now = System.currentTimeMillis();
-										TXTime tx = TXTime.newBuilder()
-												.setStime(sentElapsed)
-												.setTxtime(txTime.getTxtime())
-												.setPtime(now - startTime)
-												.setRtime(now)
-												.build();
-										
-										R modR = rpcTypes.setTXTimeR(r, tx);
-										responseObserver.onNext(modR);
-									} else {
-										responseObserver.onNext(r);
-									}
-									sc.sent(subItemsOut.apply(r));
-								},
-								err -> responseObserver.onError(err),
-								() -> responseObserver.onCompleted()
-						);
+			handler.invokeForFlux(t, sc).subscribe(
+					r -> {
+						if(hasTxTime) {
+							long now = System.currentTimeMillis();
+							TXTime tx = TXTime.newBuilder()
+									.setStime(sentElapsed)
+									.setTxtime(txTime.getTxtime())
+									.setPtime(now - startTime)
+									.setRtime(now)
+									.build();
+							
+							R modR = rpcTypes.setTXTimeR(r, tx);
+							responseObserver.onNext(modR);							
+						} else {
+							responseObserver.onNext(r);
+						}
+					},
+					err -> {
+						LOG.error("Failed to process message: {}", t, err);
+						responseObserver.onError(err);
+					},
+					() -> {
+						responseObserver.onCompleted();
 					}
-				});
-			}
+			);
 		} catch (Exception ex) {
 			LOG.error("Failed to process message", ex);
+			responseObserver.onError(ex);
 		}		
 	}
 	

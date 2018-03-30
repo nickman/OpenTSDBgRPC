@@ -100,8 +100,8 @@ public class OSMonitor {
 		LOG.info("OpenTSDBClient({}, {})", host, port);
 		client = OpenTSDBClient.newInstance(host, port);
 		LOG.info("Ready");
-		tags.push("host", ManagementFactory.getRuntimeMXBean().getName().split("@")[1])
-			.push("app", "os");
+		String hostName = ManagementFactory.getRuntimeMXBean().getName().split("@")[1];
+		String app = "os";
 		processQueries.put("java", "State.Name.ew=java");
 		processQueries.put("envoy", "State.Name.ew=envoy");
 		startConnect();
@@ -327,14 +327,23 @@ public class OSMonitor {
 					try {
 						if(os.streamerOpen.get()) {
 							os.collectCpu(flush);
+							os.tags.clear();
 							os.collectFs(flush);
+							os.tags.clear();
 							os.collectIfaces(flush);
+							os.tags.clear();
 							os.collectNetstats(flush);
+							os.tags.clear();
 							os.collectSystemMem(flush);
+							os.tags.clear();
 							os.collectSwap(flush);
+							os.tags.clear();
 							os.collectServerSockets(flush);
+							os.tags.clear();
 							os.collectClientSockets(flush);
+							os.tags.clear();
 							os.processQueries(flush);
+							os.tags.clear();
 							if(!flush) {
 								os.flush();
 							}
@@ -642,6 +651,7 @@ public class OSMonitor {
 		private final Map<K,V> map = new HashMap<>();
 		private final Map<K,V> umap = Collections.unmodifiableMap(map);
 		
+
 		public Map<K,V> map() {
 			return umap;
 		}

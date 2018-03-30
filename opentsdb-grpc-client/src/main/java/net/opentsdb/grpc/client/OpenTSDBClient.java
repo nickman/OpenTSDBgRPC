@@ -42,6 +42,8 @@ import net.opentsdb.grpc.DataPointQuery;
 import net.opentsdb.grpc.DateTime;
 import net.opentsdb.grpc.Downsample;
 import net.opentsdb.grpc.Empty;
+import net.opentsdb.grpc.FQMetric;
+import net.opentsdb.grpc.FQMetricQuery;
 import net.opentsdb.grpc.MetricAndTags;
 import net.opentsdb.grpc.MetricTags;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc;
@@ -55,6 +57,7 @@ import net.opentsdb.grpc.QueryResponse;
 import net.opentsdb.grpc.RelativeTime;
 import net.opentsdb.grpc.TSDBAnnotations;
 import net.opentsdb.grpc.client.streaming.BidiStreamer;
+import net.opentsdb.grpc.client.streaming.ServerStreamer;
 import net.opentsdb.grpc.client.streaming.StreamerBuilder;
 import net.opentsdb.grpc.client.util.ClientConfiguration;
 import net.opentsdb.grpc.common.StreamDescriptor;
@@ -296,6 +299,12 @@ public class OpenTSDBClient implements Closeable {
 				.buildBidiStreamer();
 	}
 	
+	public ServerStreamer<FQMetricQuery, FQMetric> metricsLookup(Consumer<FQMetric> outConsumer) {
+		check();
+		return StreamerBuilder.newBuilder(channel, OpenTSDBServiceGrpc.getMetricsLookupMethod(), outConsumer)
+				.buildServerStreamer();
+	}
+	
 	public String[] getAggregators() {
 		AggregatorNames names = blockingStub.getAggregators(Empty.getDefaultInstance());
 		return names.getAggregatorNameList().stream().map(ag -> ag.getName())
@@ -320,7 +329,7 @@ public class OpenTSDBClient implements Closeable {
 	/**
 	 * @param args
 	 */
-	public static void main(String[] args) {
+	public static void mainX(String[] args) {
 		
 		OpenTSDBClient client = OpenTSDBClient.newInstance("localhost", 10000).open();
 		final Logger log = client.LOG;
@@ -424,6 +433,25 @@ public class OpenTSDBClient implements Closeable {
 		
 	}
 
+	public static void main(String[] args) {
+		
+		OpenTSDBClient client = OpenTSDBClient.newInstance("localhost", 10000).open();
+		final Logger log = client.LOG;
+		log.info("Created OpenTSDBClient: {}", client);
+		final CountDownLatch latch = new CountDownLatch(1);
+		ServerStreamer<FQMetricQuery, FQMetric> streamer = client.metricsLookup(fq -> {
+			log.info("FQ: {}", fq);
+		});
+		streamer.start();
+		streamer.send(FQMetricQuery.newBuilder().setExpression("sys.cpu:cpu=*").setMaxValues(100).build());
+		try {
+			latch.await();
+			log.info("Done");
+		} catch (Exception ex) {
+			ex.printStackTrace(System.err);
+		}
+
+	}
 	
 	
 	protected class OpenTSDBClientInterceptor implements ClientInterceptor {
