@@ -26,8 +26,19 @@
         <dependency>
             <groupId>com.ecwid.consul</groupId>
             <artifactId>consul-api</artifactId>
-            <version>${consul.version}</version>
         </dependency>            
+        
+        <dependency>
+            <groupId>com.uber.jaeger</groupId>
+            <artifactId>jaeger-core</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>io.opentracing.contrib</groupId>
+            <artifactId>grpc-opentracing</artifactId>
+        </dependency>            
+        
+        
 
         <dependency>
             <groupId>net.opentsdb</groupId>

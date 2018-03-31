@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.LongAdder;
 import com.stumbleupon.async.Deferred;
 
 import io.grpc.stub.StreamObserver;
+import io.opentracing.Span;
 import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.DataPoint;
 import net.opentsdb.grpc.OpenTSDBServiceGrpc;
@@ -85,7 +86,7 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 	@Override
 	public CompletableFuture<PutDatapointsResponse> invoke(PutDatapoints putDatapoints, StreamerContext sc) {
 		final boolean details = putDatapoints.getDetails();
-		
+		final Span span = tracer.buildSpan("putDatapoints").start();
 		CompletableFuture<PutDatapointsResponse> cf = new CompletableFuture<PutDatapointsResponse>();
 		final LongAdder _okDataPoints = sc.accProcessedItems();
 		final LongAdder _failedDataPoints = sc.accFailedItems();
@@ -155,6 +156,7 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 					}
 					if(sc.isOpen()) {
 						cf.complete(response(_okDataPoints.longValue(), _failedDataPoints.longValue(), errors, false));
+						span.finish();
 					} else {
 						LOG.info("Response not sent due to cancellation");
 					}

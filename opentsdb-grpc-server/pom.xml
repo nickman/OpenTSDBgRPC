@@ -27,6 +27,12 @@
           <groupId>io.projectreactor</groupId>
           <artifactId>reactor-core</artifactId>
         </dependency>
+        
+        <dependency>
+			<groupId>com.uber.jaeger</groupId>
+			<artifactId>jaeger-core</artifactId>
+			<version>0.24.0</version>        
+        </dependency>
 
         <dependency>
             <groupId>net.opentsdb</groupId>

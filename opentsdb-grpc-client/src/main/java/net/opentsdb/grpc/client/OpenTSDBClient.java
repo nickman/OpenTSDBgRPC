@@ -61,6 +61,7 @@ import net.opentsdb.grpc.client.streaming.ServerStreamer;
 import net.opentsdb.grpc.client.streaming.StreamerBuilder;
 import net.opentsdb.grpc.client.util.ClientConfiguration;
 import net.opentsdb.grpc.common.StreamDescriptor;
+import net.opentsdb.tracing.JaegerTracing;
 
 /**
  * <p>Title: OpenTSDBClient</p>
@@ -184,8 +185,12 @@ public class OpenTSDBClient implements Closeable {
 		if(open.compareAndSet(false, true)) {
 			printConfig();
 			channel = clientConfig.build();
-			stub = OpenTSDBServiceGrpc.newStub(channel).withInterceptors(clientInterceptors);
-			blockingStub = OpenTSDBServiceGrpc.newBlockingStub(channel).withInterceptors(clientInterceptors);
+			stub = OpenTSDBServiceGrpc.newStub(channel)
+					.withInterceptors(JaegerTracing.getInstance().getClientTracingInterceptor())
+					.withInterceptors(clientInterceptors);
+			blockingStub = OpenTSDBServiceGrpc.newBlockingStub(channel)
+					.withInterceptors(JaegerTracing.getInstance().getClientTracingInterceptor())
+					.withInterceptors(clientInterceptors);
 		}
 		onStateChange();
 //		LOG.info("AGGRS: {}", 

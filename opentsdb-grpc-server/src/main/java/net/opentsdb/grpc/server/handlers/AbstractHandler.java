@@ -25,11 +25,13 @@ import javax.management.ObjectName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.uber.jaeger.Tracer;
+
 import net.opentsdb.core.TSDB;
-import net.opentsdb.grpc.FQMetric;
 import net.opentsdb.grpc.server.streaming.server.StreamerContext;
 import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.tracing.JaegerTracing;
 import reactor.core.publisher.Flux;
 
 /**
@@ -60,7 +62,9 @@ public abstract class AbstractHandler<T,R> implements Handler<T, R> {
 	/** The total number of created streams for this handler */
 	protected final LongAdder totalStreams = new LongAdder();
 	
-	protected final AtomicLong lastComm = new AtomicLong(0);	
+	protected final AtomicLong lastComm = new AtomicLong(0);
+	
+	protected final Tracer tracer;
 
 	
 	
@@ -74,6 +78,7 @@ public abstract class AbstractHandler<T,R> implements Handler<T, R> {
 		this.tsdb = tsdb;
 		this.cfg = cfg;
 		objectName = null; 
+		tracer = JaegerTracing.getInstance().tracer();
 //				register();
 	}
 	

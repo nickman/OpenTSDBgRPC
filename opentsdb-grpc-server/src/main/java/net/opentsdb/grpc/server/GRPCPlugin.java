@@ -66,6 +66,7 @@ import net.opentsdb.grpc.server.netty.EventLoopThreadFactory;
 import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.plugin.common.util.RelTime;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.tracing.JaegerTracing;
 import net.opentsdb.tsd.RpcPlugin;
 import net.opentsdb.utils.Config;
 
@@ -187,7 +188,10 @@ public class GRPCPlugin extends RpcPlugin {
 		if(epoll) {
 			serverBuilder.withChildOption(EpollChannelOption.EPOLL_MODE, EpollMode.EDGE_TRIGGERED);
 		}
-		nettyServer = serverBuilder.build();
+		nettyServer = serverBuilder
+			.intercept(JaegerTracing.getInstance().getServerTracingInterceptor())	
+			.build();
+			
 		LOG.info("Netty gRPC Server Created. Listener: {}", sa);			
 	}
 	
