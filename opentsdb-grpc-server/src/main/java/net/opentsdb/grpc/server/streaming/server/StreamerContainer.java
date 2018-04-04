@@ -39,7 +39,7 @@ import net.opentsdb.stats.StatsCollector;
 
 public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 	private static final Pattern METHOD_NAME_PARSER = Pattern.compile("(.*)?\\.(.*)?/(.*)");
-	private static final String OBJECT_NAME_FMT = "net.opentsdb.grpc.server.streamer:package=%s,class=%s,method=%s";
+	private static final String OBJECT_NAME_FMT = "net.opentsdb.grpc.server.streamer:package=%s,class=%s,method=%s,local=%s";
 	protected final Logger LOG;
 	protected final ObjectName objectName;
 	protected final MethodDescriptor<T,R> md;   // e.g. opentsdb.OpenTSDBService/Puts
@@ -57,12 +57,15 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 	protected final AtomicLong bidiSerial = new AtomicLong();
 	protected final AtomicLong serverSerial = new AtomicLong();
 	
+	protected final boolean local;
+	
 	
 	/**
 	 * Creates a new StreamerContainer
 	 * @param builder The streamer builder
 	 */
-	public StreamerContainer(StreamerBuilder<T,R> builder) {
+	public StreamerContainer(StreamerBuilder<T,R> builder, boolean local) {
+		this.local = local;
 		this.builder = builder;
 		this.handler = builder.handler;
 		md = builder.methodDescriptor();
@@ -128,7 +131,8 @@ public class StreamerContainer<T, R> implements StreamerContainerMXBean {
 			return new ObjectName(String.format(OBJECT_NAME_FMT, 
 					grpcPackage,
 					grpcClass,
-					grpcMethod
+					grpcMethod,
+					local
 			));
 		} catch (Exception ex) {
 			LOG.warn("Failed to build ObjectName for MethodDescriptor name: {}", md.getFullMethodName(), ex);

@@ -38,6 +38,7 @@ import static net.opentsdb.plugin.common.Configuration.GRPC_PERMIT_KEEP_ALIVE_TI
 import java.net.SocketAddress;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -48,6 +49,7 @@ import com.stumbleupon.async.Deferred;
 
 import io.grpc.Server;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.services.HealthStatusManager;
@@ -79,9 +81,13 @@ import net.opentsdb.utils.Config;
 
 public class GRPCPlugin extends RpcPlugin {
 	private static Logger LOG = LoggerFactory.getLogger(GRPCPlugin.class);
+	
+	public static final String IN_PROCESS_NAME = "OpenTSDBGrpcInProcessServer";
+	
 	private TSDB tsdb;
 	private Config config;
 	private OpenTSDBServer server;
+	private OpenTSDBServer localServer;
 	private Configuration cfg;
 	private boolean epoll = true;
 	
@@ -93,10 +99,15 @@ public class GRPCPlugin extends RpcPlugin {
 	private SocketAddress sa;
 	
 	private Server nettyServer;
+	private Server inProcessServer;
 	
 	private final AtomicBoolean started = new AtomicBoolean(false);
 	
 	private final HealthStatusManager healthStatusManager = new HealthStatusManager();
+	
+	public GRPCPlugin() {
+		System.setProperty("net.opentsdb.inserver", "true");
+	}
 	
 	
 	/**
@@ -110,7 +121,8 @@ public class GRPCPlugin extends RpcPlugin {
 		config = tsdb.getConfig();
 		cfg = new Configuration(config);
 		epoll = cfg.isEpoll();
-		server = new OpenTSDBServer(tsdb, cfg);
+		server = new OpenTSDBServer(tsdb, cfg, false);
+		localServer = new OpenTSDBServer(tsdb, cfg, true);
 		try {
 			initServer();
 			start();
@@ -148,6 +160,11 @@ public class GRPCPlugin extends RpcPlugin {
 	}
 	
 	private void initServer() {
+		LOG.info("Creating InProcess gRPC Server....");
+		inProcessServer = InProcessServerBuilder.forName(IN_PROCESS_NAME)
+			.directExecutor()
+			.addService(localServer)
+			.build();
 		LOG.info("Creating Netty gRPC Server....");
 		sa = cfg.getGrpcSocketAddress();
 		LOG.info("GRPC Listener Socket Address: {}", sa);
@@ -201,6 +218,9 @@ public class GRPCPlugin extends RpcPlugin {
 	public void start() {
 		if(started.compareAndSet(false, true)) {
 			try {
+				LOG.info("Starting InProcess gRPC Server....");
+				inProcessServer.start();
+				LOG.info("InProcess gRPC Server Started on {}", IN_PROCESS_NAME);
 				LOG.info("Starting Netty gRPC Server....");
 				nettyServer.start();
 				LOG.info("Netty gRPC Server Started on {}", sa);
@@ -250,6 +270,8 @@ public class GRPCPlugin extends RpcPlugin {
 		healthStatusManager.setStatus("", ServingStatus.NOT_SERVING);
 		final Deferred<Object> def = new Deferred<Object>();
 		if(started.compareAndSet(true, false)) {
+			LOG.info("Stopping InProcess gRPC Server ....");
+			inProcessServer.shutdown();			
 			LOG.info("Stopping Netty gRPC Server ....");
 			nettyServer.shutdown();
 			new Thread("NettygRPCShutdownThread") {

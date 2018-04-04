@@ -52,8 +52,8 @@ public class AnnotationHandler extends AbstractHandler implements  AnnotationHan
 	 * @param tsdb The parent TSDB instance
 	 * @param cfg The extended configuration instance
 	 */
-	public AnnotationHandler(TSDB tsdb, Configuration cfg) {
-		super(tsdb, cfg);
+	public AnnotationHandler(TSDB tsdb, Configuration cfg, boolean local) {
+		super(tsdb, cfg, local);
 	}
 	
 	/**

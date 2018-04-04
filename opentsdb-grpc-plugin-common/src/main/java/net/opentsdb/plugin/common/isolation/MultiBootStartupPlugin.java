@@ -30,7 +30,7 @@ public class MultiBootStartupPlugin extends StartupPlugin {
 	
 	protected final Set<StartupPlugin> delegates = new LinkedHashSet<>();
 	protected final String[] delegateClassNames;
-	protected IsolatedClassLoader icl;
+	protected IsolatedClassLoader2 icl;
 	protected String version = getClass().getPackage().getImplementationVersion();
 
 	
@@ -53,7 +53,7 @@ public class MultiBootStartupPlugin extends StartupPlugin {
 	@Override
 	public Config initialize(Config config) {
 		LOG.info("Initializing Delegates: {}", Arrays.toString(delegateClassNames));
-		icl = new IsolatedClassLoader(new URL[] {getClass().getProtectionDomain().getCodeSource().getLocation()});
+		icl = IsolatedClassLoader2.classLoader(true, getClass().getProtectionDomain().getCodeSource().getLocation());
 		for(String className : delegateClassNames) {
 			try {
 				Class<? extends StartupPlugin> clazz = (Class<? extends StartupPlugin>) Class.forName(className, true, icl);

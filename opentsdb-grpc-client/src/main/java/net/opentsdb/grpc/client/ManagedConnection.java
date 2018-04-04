@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,10 +64,12 @@ public class ManagedConnection implements Closeable {
 	protected final AtomicBoolean healthOk = new AtomicBoolean(false);
 	protected final Map<ConnectivityState, Set<BiConsumer<ConnectivityState, ManagedConnection>>> stateListeners = stateListeners();
 	protected final Set<BiConsumer<Boolean, ConnectivityState>> availabilityListeners = new CopyOnWriteArraySet<>();
+	protected final Set<Consumer<Metadata>> headerListeners = new CopyOnWriteArraySet<>();
+	protected final Set<Consumer<Metadata>> tailerListeners = new CopyOnWriteArraySet<>();
 	protected HealthBlockingStub healthStub = null;
 	protected final AtomicReference<Metadata> headersCapture = new AtomicReference<>(); 
 	protected final AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
-	protected ScheduledFuture<?> healtchCheckHandle = null;
+	protected ScheduledFuture<?> healthCheckHandle = null;
 	
 	protected final long healthCheckPeriodMs;
 	protected final long shutdownGraceMs;
@@ -97,7 +100,7 @@ public class ManagedConnection implements Closeable {
 			LOG.info("Scheduled HealthCheck Disabled");
 			healthOk.set(true);
 		} else {
-			healtchCheckHandle = scheduler.scheduleWithFixedDelay(healthCheckRunnable(), healthCheckPeriodMs, healthCheckPeriodMs, TimeUnit.MILLISECONDS);
+			healthCheckHandle = scheduler.scheduleWithFixedDelay(healthCheckRunnable(), healthCheckPeriodMs, healthCheckPeriodMs, TimeUnit.MILLISECONDS);
 		}
 	}
 	
@@ -123,9 +126,20 @@ public class ManagedConnection implements Closeable {
 				CallOptions callOptions, Channel next) {
 			LOG.info("HEADERS: {}", Arrays.toString(headersCapture.get().keys().toArray(new String[0])));
 			LOG.info("TRAILERS: {}", Arrays.toString(trailersCapture.get().keys().toArray(new String[0])));
+			if(!tailerListeners.isEmpty()) {
+				tailerListeners.stream()
+					.forEach(l ->  
+						executor.execute(() -> l.accept(trailersCapture.get()))
+					);
+			}
+			if(!headerListeners.isEmpty()) {
+				headerListeners.stream()
+					.forEach(l ->  
+						executor.execute(() -> l.accept(headersCapture.get()))
+					);
+			}
 			return next.newCall(method, callOptions);
 		}
-		
 	}
 	
 	protected Runnable healthCheckRunnable() {
@@ -136,8 +150,8 @@ public class ManagedConnection implements Closeable {
 	public void close() throws IOException {
 		if(connected.compareAndSet(true, false)) {
 			LOG.info("Closing ManagedConnection...");
-			if(healtchCheckHandle != null) {
-				try { healtchCheckHandle.cancel(true); } catch (Exception x) {}
+			if(healthCheckHandle != null) {
+				try { healthCheckHandle.cancel(true); } catch (Exception x) {}
 			}
 			if(healthOk.compareAndSet(true, false)) {
 				healthOk.set(false);
@@ -272,12 +286,78 @@ public class ManagedConnection implements Closeable {
 		return this;
 	}
 	
+	public ManagedConnection addHeadersListener(Consumer<Metadata> listener) {
+		headerListeners.add(Objects.requireNonNull(listener, "The passed Headers listener was null"));
+		return this;
+	}
+	
+	public ManagedConnection addTailersListener(Consumer<Metadata> listener) {
+		tailerListeners.add(Objects.requireNonNull(listener, "The passed Tailers listener was null"));
+		return this;
+	}
+	
 	private static Map<ConnectivityState, Set<BiConsumer<ConnectivityState, ManagedConnection>>> stateListeners() {
 		EnumMap<ConnectivityState, Set<BiConsumer<ConnectivityState, ManagedConnection>>> map = new EnumMap<>(ConnectivityState.class);
 		for(ConnectivityState cs : ConnectivityState.values()) {
 			map.put(cs, new CopyOnWriteArraySet<>());
 		}
 		return map;
+	}
+
+	/**
+	 * Returns 
+	 * @return the host
+	 */
+	public String getHost() {
+		return host;
+	}
+
+	/**
+	 * Returns 
+	 * @return the port
+	 */
+	public int getPort() {
+		return port;
+	}
+
+	/**
+	 * Returns 
+	 * @return the channel
+	 */
+	public ManagedChannel getChannel() {
+		return channel;
+	}
+
+	/**
+	 * Returns 
+	 * @return the connState
+	 */
+	public ConnectivityState getConnState() {
+		return connState.get();
+	}
+
+	/**
+	 * Returns 
+	 * @return the healthOk
+	 */
+	public boolean isHealthy() {
+		return healthOk.get();
+	}
+
+	/**
+	 * Returns 
+	 * @return the headersCapture
+	 */
+	public AtomicReference<Metadata> getHeadersCapture() {
+		return headersCapture;
+	}
+
+	/**
+	 * Returns 
+	 * @return the trailersCapture
+	 */
+	public AtomicReference<Metadata> getTrailersCapture() {
+		return trailersCapture;
 	}
 	
 	

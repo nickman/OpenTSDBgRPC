@@ -29,12 +29,6 @@
         </dependency>
         
         <dependency>
-			<groupId>com.uber.jaeger</groupId>
-			<artifactId>jaeger-core</artifactId>
-			<version>0.24.0</version>        
-        </dependency>
-
-        <dependency>
             <groupId>net.opentsdb</groupId>
             <artifactId>opentsdb-grpc-core</artifactId>
             <version>${project.version}</version>

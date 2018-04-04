@@ -71,11 +71,15 @@ import net.opentsdb.grpc.client.streaming.BidiStreamer;
  */
 
 public class OSMonitor {
+	public static final String ENVOY_SVC_TIME =  "x-envoy-upstream-service-time";
+	public static  final Key<String> ENVOY_SVC_TIME_KEY =  Key.of(ENVOY_SVC_TIME, Metadata.ASCII_STRING_MARSHALLER);	
+
 	protected final Logger LOG = LoggerFactory.getLogger(getClass());
 	protected final HeliosSigar sigar = HeliosSigar.getInstance();
 	protected final OpenTSDBClient client;
 	protected final AtomicBoolean connected = new AtomicBoolean(false);
 	protected final AtomicBoolean streamerOpen = new AtomicBoolean(false);
+	protected final AtomicBoolean collecting = new AtomicBoolean(false);
 	protected BidiStreamer<PutDatapoints,PutDatapointsResponse> streamer = null;
 	protected DatapointBatcher batcher;
 	protected final PushPopMap<String, String> tags = new PushPopMap<>();
@@ -85,9 +89,8 @@ public class OSMonitor {
 	protected final int port;
 	protected final AtomicReference<Metadata> headersCapture = new AtomicReference<>(); 
 	protected final AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
-	public static final String ENVOY_SVC_TIME =  "x-envoy-upstream-service-time";
-	public static  final Key<String> ENVOY_SVC_TIME_KEY =  Key.of(ENVOY_SVC_TIME, Metadata.ASCII_STRING_MARSHALLER);	
 
+	protected Thread collectionThread = null;
 
 	/**
 	 * Creates a new OSMonitor
@@ -321,53 +324,86 @@ public class OSMonitor {
 	public static void main(String[] args) {
 		OSMonitor os = new OSMonitor("localhost", 10000);
 		final boolean flush = false;
-		Thread t = new Thread() {
-			public void run() {
-				while(true) {
-					try {
-						if(os.streamerOpen.get()) {
-							os.collectCpu(flush);
-							os.tags.clear();
-							os.collectFs(flush);
-							os.tags.clear();
-							os.collectIfaces(flush);
-							os.tags.clear();
-							os.collectNetstats(flush);
-							os.tags.clear();
-							os.collectSystemMem(flush);
-							os.tags.clear();
-							os.collectSwap(flush);
-							os.tags.clear();
-							os.collectServerSockets(flush);
-							os.tags.clear();
-							os.collectClientSockets(flush);
-							os.tags.clear();
-							os.processQueries(flush);
-							os.tags.clear();
-							if(!flush) {
-								os.flush();
-							}
-						}
-						Thread.sleep(5000);
-					} catch (Exception ex) {
-						os.LOG.error("Collection Error", ex);
-					}
-				}
-			}
-		};
-		t.setDaemon(true);
-		t.start();
 		try { 
+			os.startCollection(flush, false); 
 			System.in.read();
-			t.interrupt();
+			os.stopCollection();
 		} catch (Exception ex) {}
 		os.LOG.info("Done");
 		try { os.client.close(); } catch (Exception x) {}
 		
 	}
 	
+	public void stopCollection() {
+		if(collecting.compareAndSet(true, false)) {
+			collectionThread.interrupt();
+			collectionThread = null;
+		}
+	}
+	
+	public void startCollection(final boolean flush, final boolean closeStream) {
+		if(collecting.compareAndSet(false, true)) {
+			collectionThread = new Thread("CollectionThread") {
+				public void run() {
+					while(collecting.get()) {
+						try {
+							if(closeStream) {
+								startStreamer();
+								try {
+									collect(flush);
+									Thread.currentThread().join(5000);
+								} finally {
+									stopStreamer();
+								}
+							} else {
+								if(streamerOpen.get()) {
+									collect(flush);
+									Thread.currentThread().join(5000);
+								}
+							}
+							
+							
+						} catch (InterruptedException iex) {
+							if(Thread.interrupted()) Thread.interrupted();
+						} catch (Exception ex) {
+							LOG.error("Collection Error", ex);
+						}
+					}
+				}
+			};
+			collectionThread.setDaemon(true);
+			collectionThread.start();
+		}
+	}
+	
+	protected void collect(boolean flush) throws Exception {
+		collectCpu(flush);
+		tags.clear();
+		collectFs(flush);
+		tags.clear();
+		collectIfaces(flush);
+		tags.clear();
+		collectNetstats(flush);
+		tags.clear();
+		collectSystemMem(flush);
+		tags.clear();
+		collectSwap(flush);
+		tags.clear();
+		collectServerSockets(flush);
+		tags.clear();
+		collectClientSockets(flush);
+		tags.clear();
+		processQueries(flush);
+		tags.clear();
+		if(!flush) {
+			flush();
+		}		
+	}
+	
 	public void trace(String metric, double value, Map<String, String> tagPairs) {
-		batcher.record(metric, value, tagPairs);
+		if(batcher!=null) {
+			batcher.record(metric, value, tagPairs);
+		}
 	}
 	
 	public void bytesTrace(String metric, double value, Map<String, String> tagPairs) {

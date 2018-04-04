@@ -162,6 +162,7 @@ public abstract class AbstractStreamer<T, R> implements Streamer<T, R>, Closeabl
 		}
 		
 		clientCall = channel.newCall(md, callOptions);
+		
 		responseObserver = responseObserver();
 		switch(methodType) {
 			case BIDI_STREAMING:

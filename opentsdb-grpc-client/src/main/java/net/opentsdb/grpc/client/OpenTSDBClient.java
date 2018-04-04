@@ -14,6 +14,7 @@ package net.opentsdb.grpc.client;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -23,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +40,7 @@ import io.grpc.stub.StreamObserver;
 import net.opentsdb.grpc.Aggregator;
 import net.opentsdb.grpc.AggregatorNames;
 import net.opentsdb.grpc.CreateAnnotationResponse;
+import net.opentsdb.grpc.DataPoint;
 import net.opentsdb.grpc.DataPointQuery;
 import net.opentsdb.grpc.DateTime;
 import net.opentsdb.grpc.Downsample;
@@ -79,7 +82,8 @@ public class OpenTSDBClient implements Closeable {
 	protected ManagedChannel channel = null;
 	protected OpenTSDBServiceStub stub;
 	protected OpenTSDBServiceBlockingStub blockingStub = null;
-	protected final AtomicReference<ConnectivityState> connState = new AtomicReference<>(ConnectivityState.IDLE); 
+	protected final AtomicReference<ConnectivityState> connState = new AtomicReference<>(ConnectivityState.IDLE);
+	protected Thread metricsThread;
 
 
 	/**
@@ -126,7 +130,7 @@ public class OpenTSDBClient implements Closeable {
 	
 	/**
 	 * Creates a new OpenTSDBClient
-	 * @param resource A string pointing to configuration properties for fine tuning the client.
+	 * @param resource A string pointing to configuration propertgetClientTracingInterceptories for fine tuning the client.
 	 * The resource can represent a URL, a file or a class path resource containing properties.
 	 * @return a disconnected OpenTSDBClient
 	 */
@@ -184,13 +188,15 @@ public class OpenTSDBClient implements Closeable {
 	public OpenTSDBClient open(ClientInterceptor...clientInterceptors) {
 		if(open.compareAndSet(false, true)) {
 			printConfig();
+			
 			channel = clientConfig.build();
 			stub = OpenTSDBServiceGrpc.newStub(channel)
 					.withInterceptors(JaegerTracing.getInstance().getClientTracingInterceptor())
 					.withInterceptors(clientInterceptors);
 			blockingStub = OpenTSDBServiceGrpc.newBlockingStub(channel)
-					.withInterceptors(JaegerTracing.getInstance().getClientTracingInterceptor())
+//					.withInterceptors(JaegerTracing.getInstance().getClientTracingInterceptor())
 					.withInterceptors(clientInterceptors);
+			startMetricsThread();
 		}
 		onStateChange();
 //		LOG.info("AGGRS: {}", 
@@ -203,6 +209,40 @@ public class OpenTSDBClient implements Closeable {
 			throw new IllegalStateException("Ping failed", ex);
 		}
 		return this;
+	}
+	
+	protected void stopMetricsThread() {
+		if(metricsThread != null) {
+			metricsThread.interrupt();
+			metricsThread = null;
+		}
+	}
+	
+	protected void startMetricsThread() {
+		final Supplier<Collection<DataPoint>> q = JaegerTracing.getInstance().getClientMetricQueue();
+		metricsThread = new Thread("MetricsThread") {
+			public void run() {
+				while(open.get()) {
+					Collection<DataPoint> datapoints = q.get();
+					if(!open.get()) {
+						break;
+					}
+					if(!datapoints.isEmpty()) {
+						long start = System.currentTimeMillis();
+						blockingStub.put(
+								PutDatapoints.newBuilder().addAllDataPoints(datapoints).setDetails(false).build()
+						);						
+						long elapsed = System.currentTimeMillis() - start;
+						LOG.info("Submitted Jaeger Metrics:  count={}, elapsed={} ms", datapoints.size(), elapsed);
+					}
+				}
+				LOG.info("Stopped Metrics Thread");
+				
+			}
+		};
+		metricsThread.setDaemon(true);
+		metricsThread.start();
+		LOG.info("Started Metrics Thread");
 	}
 	
 	protected void onStateChange() {
@@ -223,6 +263,7 @@ public class OpenTSDBClient implements Closeable {
 	@Override
 	public void close() throws IOException {
 		if(open.compareAndSet(true, false)) {
+			stopMetricsThread();
 			channel.shutdown();
 			channel = null;
 			stub = null;
@@ -300,7 +341,7 @@ public class OpenTSDBClient implements Closeable {
 		check();
 		return StreamerBuilder.newBuilder(channel, OpenTSDBServiceGrpc.getPutsMethod(), outConsumer)
 				.descriptor(StreamDescriptor.DatapointsDescriptor.INSTANCE)
-				.callOptions(callOptions.withCompression("gzip"))
+				.callOptions(callOptions.withCompression("gzip"))				
 				.buildBidiStreamer();
 	}
 	

@@ -27,9 +27,13 @@ import io.grpc.MethodDescriptor;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
+import io.opentracing.Span;
+import io.opentracing.Tracer;
+import io.opentracing.contrib.OpenTracingContextKey;
 import net.opentsdb.grpc.TXTime;
 import net.opentsdb.grpc.common.RPCTypes;
 import net.opentsdb.grpc.server.handlers.Handler;
+import net.opentsdb.tracing.JaegerTracing;
 
 /**
  * <p>Title: BidiServerStreamer</p>
@@ -51,6 +55,7 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 	protected final ServerCallStreamObserver<R> responseObserver;
 	protected final StreamerContext sc;
 	protected final Logger LOG;
+	protected final Tracer tracer;
 	protected long startTime = -1;	
 	
 	/**
@@ -69,6 +74,7 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 		this.responseObserver = (ServerCallStreamObserver<R>)responseObserver;
 		this.handler = builder.handler;
 		sc = streamerContext; 
+		tracer = JaegerTracing.getInstance().tracer();
 		
 		this.responseObserver.setOnCancelHandler(new Runnable() {
 			@Override
@@ -94,7 +100,6 @@ public abstract class AbstractServerStreamer<T, R> implements StreamObserver<T> 
 	@Override
 	public void onNext(T value) {
 		final long startTime = System.currentTimeMillis();
-		
 		final boolean hasTxTime = rpcTypes.hasTXTime;
 		final long sentTime;
 		final long sentElapsed;

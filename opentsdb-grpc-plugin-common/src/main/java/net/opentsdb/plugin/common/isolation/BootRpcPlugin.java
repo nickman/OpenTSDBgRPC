@@ -43,6 +43,7 @@ public abstract class BootRpcPlugin extends RpcPlugin {
 	@SuppressWarnings("unchecked")
 	@Override
 	public void initialize(TSDB tsdb) {
+		// IsolatedClassLoader2 icl = IsolatedClassLoader2.classLoader(true, getClass().getProtectionDomain().getCodeSource().getLocation());
 		IsolatedClassLoader icl = new IsolatedClassLoader(new URL[] {getClass().getProtectionDomain().getCodeSource().getLocation()});
 		try {
 			Class<? extends RpcPlugin> clazz = (Class<? extends RpcPlugin>) Class.forName(delegatePluginClassName, true, icl);

@@ -26,6 +26,8 @@ import org.slf4j.LoggerFactory;
 import com.google.protobuf.ByteString;
 import com.stumbleupon.async.Deferred;
 
+import io.grpc.Server;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.StreamObserver;
 import net.opentsdb.core.Aggregators;
 import net.opentsdb.core.DataPoint;
@@ -44,7 +46,6 @@ import net.opentsdb.grpc.DataPointQuery;
 import net.opentsdb.grpc.Empty;
 import net.opentsdb.grpc.FQMetric;
 import net.opentsdb.grpc.FQMetricQuery;
-import net.opentsdb.grpc.FQMetrics;
 import net.opentsdb.grpc.FilterMeta;
 import net.opentsdb.grpc.FilterMetas;
 import net.opentsdb.grpc.KeyValues;
@@ -78,6 +79,7 @@ import net.opentsdb.stats.StatsCollector;
 public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	private static final Logger LOG = LoggerFactory.getLogger(OpenTSDBServer.class);
 	private static final Pattern SLASH_SPLITTER = Pattern.compile("/");
+	public static final String IN_PROCESS_NAME = "OpenTSDBGrpcInProcessServer";
 	private static final String host = ManagementFactory.getRuntimeMXBean().getName().split("@")[1];
 	private final TSDB tsdb;
 	private final Configuration cfg;
@@ -88,6 +90,8 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	private final AnnotationStreamHandler annHandler;
 	private final MetricLookupHandler metricLookupHandler;
 	private final String serverId; 
+	private final boolean local;
+	
 	
 
 
@@ -95,18 +99,25 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	 * Creates a new OpenTSDBServer
 	 * @param tsdb The TSDB instance
 	 * @param cfg The configuration manager
+	 * @param inProcessServer 
 	 */
-	public OpenTSDBServer(TSDB tsdb, Configuration cfg) {
+	public OpenTSDBServer(TSDB tsdb, Configuration cfg, boolean local) {
 		this.tsdb = tsdb;
 		this.cfg = cfg;
+		this.local = local;
 		staticDir = new File(cfg.config("tsd.http.staticroot", System.getProperty("java.io.tmpdir") + File.separator + "opentsdb" + File.separator + "static"));
 		staticPath = staticDir.toPath();
+		
 		aggrNames = buildAggregatorNames();
-		putHandler = new DataPointStreamHandler(tsdb, cfg);
-		annHandler = new AnnotationStreamHandler(tsdb, cfg);
-		metricLookupHandler = new MetricLookupHandler(tsdb, cfg);
 		serverId = host + ":" + cfg.config(Configuration.GRPC_PORT, -1);
+		annHandler = new AnnotationStreamHandler(tsdb, cfg, local);
+		metricLookupHandler = new MetricLookupHandler(tsdb, cfg, local);
+		putHandler = new DataPointStreamHandler(tsdb, cfg, local);
 	}
+	
+	
+
+	
 
 	private AggregatorNames buildAggregatorNames() {
 		AggregatorNames.Builder aggrBuilder = AggregatorNames.newBuilder();
@@ -372,7 +383,7 @@ public class OpenTSDBServer extends OpenTSDBServiceImplBase {
 	 */
 	@Override
 	public void put(PutDatapoints request, StreamObserver<PutDatapointsResponse> responseObserver) {
-		//putHandler.put(request, responseObserver);		
+		putHandler.put(request, responseObserver);		
 	}
 	
 	

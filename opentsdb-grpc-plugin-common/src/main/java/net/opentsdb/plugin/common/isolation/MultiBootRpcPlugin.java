@@ -40,7 +40,7 @@ public class MultiBootRpcPlugin extends RpcPlugin {
 	
 	protected final Set<RpcPlugin> delegates = new LinkedHashSet<>();
 	protected final String[] delegateClassNames;
-	protected IsolatedClassLoader icl;
+	protected IsolatedClassLoader2 icl;
 	protected String version = getClass().getPackage().getImplementationVersion();
 	
 	/**
@@ -62,7 +62,7 @@ public class MultiBootRpcPlugin extends RpcPlugin {
 	@SuppressWarnings("unchecked")
 	public void initialize(TSDB tsdb) {
 		LOG.info("Creating Delegates: {}", Arrays.toString(delegateClassNames));
-		icl = new IsolatedClassLoader(new URL[] {getClass().getProtectionDomain().getCodeSource().getLocation()});
+		icl = IsolatedClassLoader2.classLoader(true, getClass().getProtectionDomain().getCodeSource().getLocation());
 		for(String className : delegateClassNames) {
 			try {
 				Class<? extends RpcPlugin> clazz = (Class<? extends RpcPlugin>) Class.forName(className, true, icl);

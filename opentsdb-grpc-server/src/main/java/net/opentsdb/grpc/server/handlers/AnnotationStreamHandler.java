@@ -44,12 +44,12 @@ import net.opentsdb.stats.StatsCollector;
 
 public class AnnotationStreamHandler extends AbstractHandler<TSDBAnnotations, CreateAnnotationResponse> {
 
-	public AnnotationStreamHandler(TSDB tsdb, Configuration cfg) {
-		super(tsdb, cfg);
+	public AnnotationStreamHandler(TSDB tsdb, Configuration cfg, boolean local) {
+		super(tsdb, cfg, local);
 	}
 	
 	protected final StreamerContainer<TSDBAnnotations, CreateAnnotationResponse> createAnnotationsStreamContainer = 
-			new StreamerContainer<>(new StreamerBuilder<>(OpenTSDBServiceGrpc.getCreateAnnotationsMethod(), this));
+			new StreamerContainer<>(new StreamerBuilder<>(OpenTSDBServiceGrpc.getCreateAnnotationsMethod(), this), local);
 	
 	public StreamObserver<TSDBAnnotations> createAnnotations(StreamObserver<CreateAnnotationResponse> responseObserver) {
 		return createAnnotationsStreamContainer.newBidiStreamer(responseObserver).start();

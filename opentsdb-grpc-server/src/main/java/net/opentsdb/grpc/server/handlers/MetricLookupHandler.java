@@ -73,11 +73,11 @@ public class MetricLookupHandler extends AbstractHandler<FQMetricQuery, FQMetric
 	
 	protected final StreamerContainer<FQMetricQuery, FQMetric> metricLookupStreamContainer = 
 			new StreamerContainer<>(new StreamerBuilder<>(OpenTSDBServiceGrpc.getMetricsLookupMethod(), this)
-			);
+					, local);
 
 
-	public MetricLookupHandler(TSDB tsdb, Configuration cfg) {
-		super(tsdb, cfg);
+	public MetricLookupHandler(TSDB tsdb, Configuration cfg, boolean local) {
+		super(tsdb, cfg, local);
 		hbaseClient = tsdb.getClient();
 	}
 	

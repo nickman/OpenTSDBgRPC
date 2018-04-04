@@ -15,6 +15,7 @@ package net.opentsdb.grpc.server.handlers;
 import java.lang.management.ManagementFactory;
 import java.util.Date;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
@@ -25,7 +26,7 @@ import javax.management.ObjectName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.uber.jaeger.Tracer;
+import io.opentracing.Tracer;
 
 import net.opentsdb.core.TSDB;
 import net.opentsdb.grpc.server.streaming.server.StreamerContext;
@@ -43,7 +44,7 @@ import reactor.core.publisher.Flux;
 
 public abstract class AbstractHandler<T,R> implements Handler<T, R> {
 	/** The JMX ObjectName prefix */
-	protected static final String OBJECT_NAME_PREFIX = "net.opentsdb.grpc:type=GRPCHandler,name=";
+	protected static final String OBJECT_NAME_TEMPLATE = "net.opentsdb.grpc:type=GRPCHandler,name=%s,local=%s";
 	/** The platform MBeanServer */
 	protected static final MBeanServer MBEAN_SERVER = ManagementFactory.getPlatformMBeanServer();
 	/** Instance logger */
@@ -65,6 +66,7 @@ public abstract class AbstractHandler<T,R> implements Handler<T, R> {
 	protected final AtomicLong lastComm = new AtomicLong(0);
 	
 	protected final Tracer tracer;
+	protected final boolean local;
 
 	
 	
@@ -74,9 +76,10 @@ public abstract class AbstractHandler<T,R> implements Handler<T, R> {
 	 * @param tsdb The parent TSDB instance
 	 * @param cfg The extended configuration instance
 	 */
-	public AbstractHandler(TSDB tsdb, Configuration cfg) {	
+	public AbstractHandler(TSDB tsdb, Configuration cfg, boolean local) {	
 		this.tsdb = tsdb;
 		this.cfg = cfg;
+		this.local = local;
 		objectName = null; 
 		tracer = JaegerTracing.getInstance().tracer();
 //				register();
@@ -131,6 +134,15 @@ public abstract class AbstractHandler<T,R> implements Handler<T, R> {
 	 */
 	protected abstract void doStats(StatsCollector collector);
 	
+	
+	protected long microTime(long nanos) {
+		return TimeUnit.MICROSECONDS.convert(System.nanoTime() - nanos, TimeUnit.NANOSECONDS);
+	}
+	
+	protected double perItem(double items, double micros) {
+		if(items==0D || micros==0D) return 0D;
+		return micros/items;
+	}
 
 	/**
 	 * Creates the JMX ObjectName and registers this handler
@@ -139,7 +151,8 @@ public abstract class AbstractHandler<T,R> implements Handler<T, R> {
 	protected ObjectName register() {
 		
 		try {
-			ObjectName on = new ObjectName(OBJECT_NAME_PREFIX + name);
+			String islocal = local ? "true" : "false";
+			ObjectName on = new ObjectName(String.format(OBJECT_NAME_TEMPLATE, name, islocal));
 			MBEAN_SERVER.registerMBean(this, on);
 			return on;
 		} catch (Exception ex) {

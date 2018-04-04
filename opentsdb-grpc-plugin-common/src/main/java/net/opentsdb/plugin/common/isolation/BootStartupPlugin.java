@@ -45,7 +45,9 @@ public class BootStartupPlugin extends StartupPlugin {
 	@SuppressWarnings("unchecked")
 	@Override
 	public Config initialize(Config config) {
+		// IsolatedClassLoader2 icl = IsolatedClassLoader2.classLoader(true, getClass().getProtectionDomain().getCodeSource().getLocation());
 		IsolatedClassLoader icl = new IsolatedClassLoader(new URL[] {getClass().getProtectionDomain().getCodeSource().getLocation()});
+
 		try {
 			Class<? extends StartupPlugin> clazz = (Class<? extends StartupPlugin>) Class.forName(delegatePluginClassName, true, icl);
 			delegate = clazz.newInstance();

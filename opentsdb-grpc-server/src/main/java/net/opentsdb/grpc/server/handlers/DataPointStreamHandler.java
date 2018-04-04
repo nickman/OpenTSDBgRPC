@@ -14,7 +14,9 @@ package net.opentsdb.grpc.server.handlers;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
 
 import com.stumbleupon.async.Deferred;
@@ -27,13 +29,14 @@ import net.opentsdb.grpc.OpenTSDBServiceGrpc;
 import net.opentsdb.grpc.PutDatapointError;
 import net.opentsdb.grpc.PutDatapoints;
 import net.opentsdb.grpc.PutDatapointsResponse;
-import net.opentsdb.grpc.TXTime;
 import net.opentsdb.grpc.server.SuAsyncHelpers;
 import net.opentsdb.grpc.server.streaming.server.StreamerBuilder;
 import net.opentsdb.grpc.server.streaming.server.StreamerContainer;
 import net.opentsdb.grpc.server.streaming.server.StreamerContext;
 import net.opentsdb.plugin.common.Configuration;
 import net.opentsdb.stats.StatsCollector;
+import net.opentsdb.tracing.JaegerTracing;
+import reactor.core.publisher.Mono;
 
 /**
  * <p>Title: DataPointStreamHandler</p>
@@ -53,7 +56,7 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 	protected final StreamerContainer<PutDatapoints, PutDatapointsResponse> putDataPointsStreamContainer = 
 			new StreamerContainer<>(new StreamerBuilder<>(OpenTSDBServiceGrpc.getPutsMethod(), this)
 				.subItemsIn(this::countIn)
-				.subItemsOut(this::countOut)
+				.subItemsOut(this::countOut), local
 			);
 	
 	public int countIn(PutDatapoints pd) { return pd.getDataPointsCount(); }
@@ -64,12 +67,97 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 	 * @param tsdb
 	 * @param cfg
 	 */
-	public DataPointStreamHandler(TSDB tsdb, Configuration cfg) {
-		super(tsdb, cfg);
+	public DataPointStreamHandler(TSDB tsdb, Configuration cfg, boolean local) {
+		super(tsdb, cfg, local);
 	}
 	
 	public StreamObserver<PutDatapoints> puts(StreamObserver<PutDatapointsResponse> responseObserver) {
 		return putDataPointsStreamContainer.newBidiStreamer(responseObserver).start();
+	}
+	
+	public void put(PutDatapoints request, StreamObserver<PutDatapointsResponse> responseObserver) {
+		putDatapoints(request).subscribe(
+			resp -> {
+				responseObserver.onNext(resp);
+				responseObserver.onCompleted();
+			},
+			err -> {
+				responseObserver.onError(err);
+			}
+		);
+	}
+	
+	protected Mono<PutDatapointsResponse> putDatapoints(final PutDatapoints request) {
+		return Mono.create(sink -> {			
+			final int dpSize = request.getDataPointsCount();
+			final boolean details = request.getDetails();
+			final LongAdder _okDataPoints = new LongAdder();
+			final LongAdder _failedDataPoints = new LongAdder();
+			
+			LOG.info("Simple Putting Datapoints: count={}, details={}", dpSize, details);
+			final List<PutDatapointError> errors = details ? new ArrayList<>() : null;
+			try {
+				List<Deferred<Object>> defs = new ArrayList<>(dpSize);
+				for(int idx = 0; idx < dpSize; idx ++) {
+					DataPoint dp = request.getDataPoints(idx);
+					try {						
+						double dval = dp.getValue();
+						long lval = (long)dval;
+						double fpart = dval - lval;
+						boolean isDouble = fpart==0D;
+						Deferred<Object> def = null;
+						if(isDouble) {
+							def = tsdb.addPoint(dp.getMetric(), dp.getTimestamp(), dval, dp.getMetricTags().getTagsMap());
+						} else {
+							def = tsdb.addPoint(dp.getMetric(), dp.getTimestamp(), lval, dp.getMetricTags().getTagsMap());
+						}
+						SuAsyncHelpers.singleTCallbacks(def, 
+								obj -> {
+									_okDataPoints.increment();
+								}, 
+								err -> {
+									_failedDataPoints.increment();
+									if(details) {										
+										errors.add(PutDatapointError.newBuilder()
+												.setDataPoint(dp)
+												.setError(err.getMessage())
+												.build());
+									}
+									if(LOG.isDebugEnabled()) {
+										LOG.warn("DataPoint put failed: dp={}", dp, err);
+									} else {
+										LOG.warn("DataPoint put failed: dp={}, err={}", dp, err);
+									}
+								}
+						);
+						defs.add(def);
+					} catch (Exception err) {
+						if(details) {
+							errors.add(PutDatapointError.newBuilder()
+									.setDataPoint(dp)
+									.setError(err.getMessage())
+									.build());
+						}
+						if(LOG.isDebugEnabled()) {
+							LOG.warn("DataPoint put failed: dp={}", dp, err);
+						} else {
+							LOG.warn("DataPoint put failed: dp={}, err={}", dp, err);
+						}
+					}
+					LOG.info("Grouping DPoint Deferreds: {}", defs.size());
+					SuAsyncHelpers.singleTBoth(Deferred.group(defs), (o,t) -> {
+						if(t!=null) {
+							LOG.error("Batch Write Failed", t);							
+						} else {							
+							sink.success(response(_okDataPoints.longValue(), _failedDataPoints.longValue(), errors, true));
+						}
+					});
+				}
+			} catch (Exception ex) {
+				LOG.error("PutDatapoints Error", ex);
+				sink.error(ex);
+			}
+		});
 	}
 
 	
@@ -85,13 +173,19 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 
 	@Override
 	public CompletableFuture<PutDatapointsResponse> invoke(PutDatapoints putDatapoints, StreamerContext sc) {
+		final long nanoStart = System.nanoTime();
 		final boolean details = putDatapoints.getDetails();
-		final Span span = tracer.buildSpan("putDatapoints").start();
+		
+		
 		CompletableFuture<PutDatapointsResponse> cf = new CompletableFuture<PutDatapointsResponse>();
 		final LongAdder _okDataPoints = sc.accProcessedItems();
 		final LongAdder _failedDataPoints = sc.accFailedItems();
 		final List<PutDatapointError> errors = details ? new ArrayList<>() : null;
 		int dpSize = putDatapoints.getDataPointsCount();
+		final Span span = JaegerTracing.getInstance().newSpan("putDatapoints");			
+		span.setTag("datapoints", dpSize);
+		span.setTag("details", details);
+		
 		LOG.info("Putting Datapoints: count={}, details={}", dpSize, details);
 		try {
 			List<Deferred<Object>> defs = new ArrayList<>(dpSize);
@@ -155,8 +249,16 @@ public class DataPointStreamHandler extends AbstractHandler<PutDatapoints, PutDa
 						LOG.error("Batch Write Failed", t);							
 					}
 					if(sc.isOpen()) {
-						cf.complete(response(_okDataPoints.longValue(), _failedDataPoints.longValue(), errors, false));
+						long ok = _okDataPoints.longValue();
+						long failed = _failedDataPoints.longValue();
+						cf.complete(response(ok, failed, errors, false));
+						long micros = microTime(nanoStart);
+						LOG.info("CLOSING SPAN: type={}, elapsed={} ms", span.getClass().getName(), TimeUnit.MICROSECONDS.toMillis(micros));
+						span.setTag("perdp", perItem(dpSize, micros));
+						span.setTag("okdp", ok);
+						span.setTag("faileddp", failed);
 						span.finish();
+
 					} else {
 						LOG.info("Response not sent due to cancellation");
 					}

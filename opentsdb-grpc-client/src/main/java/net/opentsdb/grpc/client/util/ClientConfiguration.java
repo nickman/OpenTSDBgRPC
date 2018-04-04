@@ -30,6 +30,7 @@ import io.netty.channel.epoll.Epoll;
 import net.opentsdb.grpc.client.envoy.EnvoyFinder;
 import net.opentsdb.plugin.common.util.RelTime;
 import net.opentsdb.plugin.common.util.TUnit;
+import net.opentsdb.tracing.JaegerTracing;
 
 /**
  * <p>Title: ClientConfiguration</p>
@@ -258,6 +259,8 @@ public class ClientConfiguration {
 		mcb.maxHeaderListSize(maxHeaderListSize);
 		
 		mcb.withOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+		
+		mcb.intercept(JaegerTracing.getInstance().getClientTracingInterceptor());
 //		
 		return mcb;
 	}
